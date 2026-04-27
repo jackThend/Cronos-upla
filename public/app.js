@@ -1,5 +1,5 @@
 // URLs base
-const API_URL = 'http://localhost:3000/api';
+const API_URL = '/api';
 
 // Utilidad: Parsear JSON o lanzar error
 const handleResponse = async (res) => {
