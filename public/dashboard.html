@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronos UPLA - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard-layout">
+        
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <h1 class="sidebar-title">Cronos UPLA</h1>
+            <ul class="sidebar-menu">
+                <li class="active"><a href="#seccion-escenas">Crear Escena</a></li>
+                <li><a href="#seccion-lineas">Añadir Línea</a></li>
+                <li><a href="#seccion-eventos">Crear Evento</a></li>
+                <li><a href="#seccion-visualizacion">Visor de Simultaneidad</a></li>
+            </ul>
+            <button id="btnLogout" class="btn logout-btn">Cerrar Sesión</button>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <div class="dashboard-header">
+                <h2>Panel de Administración</h2>
+                <div id="userInfo">Bienvenido/a</div>
+            </div>
+
+            <!-- FORMULARIO A: Crear Escena Crono -->
+            <section class="card" id="seccion-escenas">
+                <h3 class="card-title">A. Crear Nueva Escena Crono</h3>
+                <form id="formEscena">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="nombreEscena">Nombre de la Escena</label>
+                            <input type="text" id="nombreEscena" class="form-control" required placeholder="Ej: Historia de Occidente">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn">Guardar Escena</button>
+                </form>
+            </section>
+
+            <!-- FORMULARIO B: Añadir Línea de Tiempo -->
+            <section class="card" id="seccion-lineas">
+                <h3 class="card-title">B. Añadir Línea de Tiempo a una Escena</h3>
+                <form id="formLinea">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="escenaSeleccionada">Escena Crono</label>
+                            <select id="escenaSeleccionada" class="form-control" required>
+                                <option value="">-- Seleccionar Escena --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="zonaSeleccionada">Zona Geográfica</label>
+                            <select id="zonaSeleccionada" class="form-control" required>
+                                <option value="">-- Seleccionar Zona --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="nombreLinea">Nombre de la Línea</label>
+                            <input type="text" id="nombreLinea" class="form-control" required placeholder="Ej: Eventos en Europa">
+                        </div>
+                        <div class="form-group">
+                            <label for="colorLinea">Color Representativo</label>
+                            <input type="color" id="colorLinea" class="form-control color-input" required value="#4a90e2">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn">Guardar Línea</button>
+                </form>
+            </section>
+
+            <!-- FORMULARIO C: Crear Evento Histórico -->
+            <section class="card" id="seccion-eventos">
+                <h3 class="card-title">C. Crear Evento Histórico</h3>
+                <form id="formEvento">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="escenaParaEvento">Escena (Filtro)</label>
+                            <select id="escenaParaEvento" class="form-control" required>
+                                <option value="">-- Seleccionar Escena --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="lineaSeleccionada">Línea de Tiempo (Destino)</label>
+                            <select id="lineaSeleccionada" class="form-control" required>
+                                <option value="">-- Primero selecciona una Escena --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="categoriaEvento">Categoría</label>
+                            <select id="categoriaEvento" class="form-control" required>
+                                <option value="">-- Seleccionar Categoría --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="tituloEvento">Título del Evento</label>
+                            <input type="text" id="tituloEvento" class="form-control" required placeholder="Ej: Caída de Roma">
+                        </div>
+                        <div class="form-group">
+                            <label for="anioInicio">Año de Inicio</label>
+                            <input type="number" id="anioInicio" class="form-control" required placeholder="Ej: 476">
+                        </div>
+                        <div class="form-group">
+                            <label for="anioFin">Año de Fin (Opcional)</label>
+                            <input type="number" id="anioFin" class="form-control" placeholder="Ej: 476">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="descEvento">Descripción del Evento</label>
+                            <textarea id="descEvento" class="form-control" placeholder="Escribe los detalles aquí..."></textarea>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn">Guardar Evento</button>
+                </form>
+            </section>
+
+            <!-- VISTA DE SIMULTANEIDAD BÁSICA -->
+            <section class="card" id="seccion-visualizacion">
+                <h3 class="card-title">D. Visor Básico de Simultaneidad</h3>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="escenaVisualizar">Selecciona una Escena para Visualizar</label>
+                    <select id="escenaVisualizar" class="form-control">
+                        <option value="">-- Seleccionar Escena --</option>
+                    </select>
+                </div>
+                <div id="lienzoContenedor" style="display: flex; flex-direction: column; gap: 20px;">
+                    <p style="text-align:center; color: var(--text-light);">Selecciona una escena para ver sus líneas apiladas</p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Pequeño script para evitar que usuarios no logueados entren al dashboard directamente
+        document.addEventListener('DOMContentLoaded', () => {
+            const userStr = localStorage.getItem('usuario_cronos');
+            if(!userStr) {
+                window.location.href = 'index.html';
+                return;
+            }
+            const user = JSON.parse(userStr);
+            document.getElementById('userInfo').textContent = `Hola, ${user.nombre}`;
+        });
+    </script>
+</body>
+</html>
