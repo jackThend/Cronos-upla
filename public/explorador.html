@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronos UPLA - Explorador</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-body">
+    
+    <div style="position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column;">
+        <nav class="top-nav glass-panel">
+            <a href="#" class="nav-title" style="display:flex; align-items:center; gap: 10px;">
+                <img src="assets/img/escultura.png" alt="Logo" style="height: 30px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.5));">
+                CRONOS UPLA
+            </a>
+            <div class="nav-links">
+                <span id="userInfo" style="margin-right: 20px; font-weight: normal; font-size: 0.9rem;"></span>
+                <a href="dashboard.html" id="linkAdmin">Administración</a>
+                <a href="#" id="btnLogout">Cerrar Sesión</a>
+            </div>
+        </nav>
+
+        <div class="gallery-container" style="flex: 1;">
+            <h1 class="gallery-title">Explora la Historia</h1>
+            
+            <!-- Buscador de Escenas -->
+            <div class="search-container" style="max-width: 600px; margin: 0 auto 2rem auto;">
+                <input type="text" id="buscadorEscenas" class="form-control glass-panel" placeholder="🔍 Buscar escena por nombre..." style="font-size: 1.1rem; padding: 1rem 1.5rem; border-radius: 30px;">
+            </div>
+
+            <div class="scenes-grid" id="scenesGrid">
+                <!-- Contenedor Tarjetas -->
+                <p style="text-align:center; color: #ccc; grid-column: 1 / -1;">Cargando escenas...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notificaciones Toast -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="app.js"></script>
+    <script>
+        // Validacion sesion
+        document.addEventListener('DOMContentLoaded', () => {
+            const cadenaUsuario = localStorage.getItem('usuario_cronos');
+            if(!cadenaUsuario) {
+                window.location.href = 'index.html';
+                return;
+            }
+            const usuarioObj = JSON.parse(cadenaUsuario);
+            document.getElementById('userInfo').textContent = `Hola, ${usuarioObj.nombre}`;
+            
+            if (usuarioObj.id_perfil === 2) {
+                document.getElementById('linkAdmin').style.display = 'none';
+            }
+            
+            // Inicio renderizado explorador
+            if(window.cargarExplorador) {
+                window.cargarExplorador();
+            }
+        });
+    </script>
+</body>
+</html>

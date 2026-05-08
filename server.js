@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const path = require('path');
-const { poolPromise, sql } = require('./db');
+const { promesaPool, sql } = require('./db');
 
 require('dotenv').config();
 
@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // RUTAS DE LA API (Backend)
 // ---------------------------------------------------------
 
-// 1. POST /api/registro: Para crear un usuario en la tabla Usuarios
+// Inicio logica registro
 app.post('/api/registro', async (req, res) => {
     try {
         const { rut, id_perfil, nombre_completo, email, password } = req.body;
@@ -28,28 +28,28 @@ app.post('/api/registro', async (req, res) => {
             return res.status(400).json({ error: 'Todos los campos son requeridos' });
         }
 
-        const pool = await poolPromise;
+        const conexionPool = await promesaPool;
 
-        // Verificar si el usuario ya existe
-        const userExist = await pool.request()
+        // Verificacion usuario existente
+        const usuarioExiste = await conexionPool.request()
             .input('rut', sql.VarChar, rut)
             .query('SELECT rut_usuario FROM Usuarios WHERE rut_usuario = @rut');
 
-        if (userExist.recordset.length > 0) {
+        if (usuarioExiste.recordset.length > 0) {
             return res.status(400).json({ error: 'El usuario ya está registrado' });
         }
 
-        // Hash de contraseña
-        const salt = await bcrypt.genSalt(10);
-        const password_hash = await bcrypt.hash(password, salt);
+        // Hash clave
+        const semilla = await bcrypt.genSalt(10);
+        const hashClave = await bcrypt.hash(password, semilla);
 
-        // Insertar usuario
-        await pool.request()
+        // Insercion DB
+        await conexionPool.request()
             .input('rut', sql.VarChar, rut)
             .input('id_perfil', sql.Int, id_perfil)
             .input('nombre_completo', sql.VarChar, nombre_completo)
             .input('email', sql.VarChar, email)
-            .input('password_hash', sql.VarChar, password_hash)
+            .input('password_hash', sql.VarChar, hashClave)
             .query(`
                 INSERT INTO Usuarios (rut_usuario, id_perfil, nombre_completo, email, password_hash)
                 VALUES (@rut, @id_perfil, @nombre_completo, @email, @password_hash)
@@ -63,7 +63,7 @@ app.post('/api/registro', async (req, res) => {
     }
 });
 
-// 2. POST /api/login: Para validar email y contraseña
+// Inicio logica login
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -72,29 +72,30 @@ app.post('/api/login', async (req, res) => {
             return res.status(400).json({ error: 'Email y contraseña son requeridos' });
         }
 
-        const pool = await poolPromise;
-        const result = await pool.request()
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request()
             .input('email', sql.VarChar, email)
-            .query('SELECT rut_usuario, nombre_completo, email, password_hash FROM Usuarios WHERE email = @email');
+            .query('SELECT rut_usuario, id_perfil, nombre_completo, email, password_hash FROM Usuarios WHERE email = @email');
 
-        const user = result.recordset[0];
+        const usuario = resultado.recordset[0];
 
-        if (!user) {
+        if (!usuario) {
             return res.status(400).json({ error: 'Credenciales inválidas' });
         }
 
-        // Validar contraseña
-        const validPassword = await bcrypt.compare(password, user.password_hash);
-        if (!validPassword) {
+        // Validacion clave
+        const claveValida = await bcrypt.compare(password, usuario.password_hash);
+        if (!claveValida) {
             return res.status(400).json({ error: 'Credenciales inválidas' });
         }
 
         res.status(200).json({
             mensaje: 'Login exitoso',
             usuario: {
-                rut: user.rut_usuario,
-                nombre: user.nombre_completo,
-                email: user.email
+                rut: usuario.rut_usuario,
+                id_perfil: usuario.id_perfil,
+                nombre: usuario.nombre_completo,
+                email: usuario.email
             }
         });
     } catch (error) {
@@ -104,7 +105,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 3. POST /api/escenas: Crea una nueva "Escena Crono"
+// Inicio logica creacion escena
 app.post('/api/escenas', async (req, res) => {
     try {
         const { nombre_escena, rut_usuario } = req.body;
@@ -113,8 +114,8 @@ app.post('/api/escenas', async (req, res) => {
             return res.status(400).json({ error: 'nombre_escena y rut_usuario son requeridos' });
         }
 
-        const pool = await poolPromise;
-        await pool.request()
+        const conexionPool = await promesaPool;
+        await conexionPool.request()
             .input('nombre_escena', sql.VarChar, nombre_escena)
             .input('rut_usuario', sql.VarChar, rut_usuario)
             .query(`
@@ -130,7 +131,7 @@ app.post('/api/escenas', async (req, res) => {
     }
 });
 
-// 4. POST /api/lineas: Agrega una "Línea de Tiempo" a una Escena
+// Inicio logica creacion linea
 app.post('/api/lineas', async (req, res) => {
     try {
         const { id_escena, id_zona, nombre_linea, color_personalizado } = req.body;
@@ -139,8 +140,8 @@ app.post('/api/lineas', async (req, res) => {
             return res.status(400).json({ error: 'Todos los campos de la línea son requeridos' });
         }
 
-        const pool = await poolPromise;
-        await pool.request()
+        const conexionPool = await promesaPool;
+        await conexionPool.request()
             .input('id_escena', sql.Int, id_escena)
             .input('id_zona', sql.Int, id_zona)
             .input('nombre_linea', sql.VarChar, nombre_linea)
@@ -158,7 +159,7 @@ app.post('/api/lineas', async (req, res) => {
     }
 });
 
-// 5. POST /api/eventos: Crea un "Evento Histórico" dentro de una Línea
+// Inicio logica creacion evento
 app.post('/api/eventos', async (req, res) => {
     try {
         const { id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url } = req.body;
@@ -167,8 +168,8 @@ app.post('/api/eventos', async (req, res) => {
             return res.status(400).json({ error: 'id_linea, titulo_evento y anio_inicio son requeridos' });
         }
 
-        const pool = await poolPromise;
-        await pool.request()
+        const conexionPool = await promesaPool;
+        await conexionPool.request()
             .input('id_linea', sql.Int, id_linea)
             .input('id_categoria', sql.Int, id_categoria || null)
             .input('titulo_evento', sql.VarChar, titulo_evento)
@@ -189,12 +190,12 @@ app.post('/api/eventos', async (req, res) => {
     }
 });
 
-// 6. GET /api/escenas: Lista todas las escenas
+// Inicio listado escenas
 app.get('/api/escenas', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM Escenas_Crono');
-        res.status(200).json({ resultados: result.recordset });
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request().query('SELECT * FROM Escenas_Crono');
+        res.status(200).json({ resultados: resultado.recordset });
     } catch (error) {
         console.error('Error al buscar escenas:', error.message);
         console.error(error);
@@ -202,14 +203,14 @@ app.get('/api/escenas', async (req, res) => {
     }
 });
 
-// 7. GET /api/escenas/:id/detalle: Devuelve la escena con líneas y eventos
+// Inicio detalle escena
 app.get('/api/escenas/:id/detalle', async (req, res) => {
     try {
         const id_escena = req.params.id;
-        const pool = await poolPromise;
+        const conexionPool = await promesaPool;
         
-        // Obtenemos la escena
-        const escenaRes = await pool.request()
+        // Consulta escena principal
+        const escenaRes = await conexionPool.request()
             .input('id_escena', sql.Int, id_escena)
             .query('SELECT * FROM Escenas_Crono WHERE id_escena = @id_escena');
             
@@ -218,8 +219,8 @@ app.get('/api/escenas/:id/detalle', async (req, res) => {
         }
         const escena = escenaRes.recordset[0];
 
-        // Obtenemos las líneas de esa escena (con join a Zonas para tener el nombre)
-        const lineasRes = await pool.request()
+        // Consulta lineas relacionadas
+        const lineasRes = await conexionPool.request()
             .input('id_escena', sql.Int, id_escena)
             .query(`
                 SELECT L.*, Z.nombre_zona 
@@ -229,11 +230,11 @@ app.get('/api/escenas/:id/detalle', async (req, res) => {
             `);
         escena.lineas = lineasRes.recordset;
 
-        // Obtenemos todos los eventos para estas líneas
+        // Consulta eventos relacionados
         if (escena.lineas.length > 0) {
             const lineasIds = escena.lineas.map(l => l.id_linea);
-            // Usaremos IN clause
-            const eventosRes = await pool.request()
+            // Clausula de inclusion
+            const eventosRes = await conexionPool.request()
                 .query(`
                     SELECT E.*, C.nombre_categoria 
                     FROM Eventos_Historicos E
@@ -242,7 +243,7 @@ app.get('/api/escenas/:id/detalle', async (req, res) => {
                     ORDER BY E.anio_inicio ASC
                 `);
             
-            // Agrupar eventos por línea
+            // Agrupacion local
             escena.lineas.forEach(linea => {
                 linea.eventos = eventosRes.recordset.filter(e => e.id_linea === linea.id_linea);
             });
@@ -256,12 +257,12 @@ app.get('/api/escenas/:id/detalle', async (req, res) => {
     }
 });
 
-// 8. Endpoints auxiliares para poblar selects
+// Inicio endpoints auxiliares
 app.get('/api/zonas', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM Zonas_Geograficas');
-        res.status(200).json({ resultados: result.recordset });
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request().query('SELECT * FROM Zonas_Geograficas');
+        res.status(200).json({ resultados: resultado.recordset });
     } catch (error) {
         res.status(500).json({ error: 'Error al buscar zonas' });
     }
@@ -269,9 +270,9 @@ app.get('/api/zonas', async (req, res) => {
 
 app.get('/api/categorias', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM Categorias');
-        res.status(200).json({ resultados: result.recordset });
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request().query('SELECT * FROM Categorias');
+        res.status(200).json({ resultados: resultado.recordset });
     } catch (error) {
         res.status(500).json({ error: 'Error al buscar categorias' });
     }
@@ -279,17 +280,90 @@ app.get('/api/categorias', async (req, res) => {
 
 app.get('/api/lineas/escena/:id_escena', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request()
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request()
             .input('id_escena', sql.Int, req.params.id_escena)
             .query('SELECT * FROM Lineas_Tiempo WHERE id_escena = @id_escena');
-        res.status(200).json({ resultados: result.recordset });
+        res.status(200).json({ resultados: resultado.recordset });
     } catch (error) {
         res.status(500).json({ error: 'Error al buscar lineas' });
     }
 });
 
-// Iniciar servidor
+// Inicio listado eventos linea
+app.get('/api/eventos/linea/:id_linea', async (req, res) => {
+    try {
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request()
+            .input('id_linea', sql.Int, req.params.id_linea)
+            .query(`
+                SELECT E.*, C.nombre_categoria 
+                FROM Eventos_Historicos E
+                LEFT JOIN Categorias C ON E.id_categoria = C.id_categoria
+                WHERE E.id_linea = @id_linea
+                ORDER BY E.anio_inicio ASC
+            `);
+        res.status(200).json({ resultados: resultado.recordset });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al buscar eventos de la línea' });
+    }
+});
+
+// Inicio actualizacion evento
+app.put('/api/eventos/:id', async (req, res) => {
+    try {
+        const id_evento = req.params.id;
+        const { id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url } = req.body;
+
+        if (!titulo_evento || !anio_inicio) {
+            return res.status(400).json({ error: 'titulo_evento y anio_inicio son requeridos' });
+        }
+
+        const conexionPool = await promesaPool;
+        await conexionPool.request()
+            .input('id_evento', sql.Int, id_evento)
+            .input('id_categoria', sql.Int, id_categoria || null)
+            .input('titulo_evento', sql.VarChar, titulo_evento)
+            .input('anio_inicio', sql.Int, anio_inicio)
+            .input('anio_fin', sql.Int, anio_fin || null)
+            .input('descripcion', sql.Text, descripcion || null)
+            .input('imagen_url', sql.VarChar, imagen_url || null)
+            .query(`
+                UPDATE Eventos_Historicos
+                SET id_categoria = @id_categoria, 
+                    titulo_evento = @titulo_evento, 
+                    anio_inicio = @anio_inicio, 
+                    anio_fin = @anio_fin, 
+                    descripcion = @descripcion, 
+                    imagen_url = @imagen_url
+                WHERE id_evento = @id_evento
+            `);
+
+        res.status(200).json({ mensaje: 'Evento actualizado exitosamente' });
+    } catch (error) {
+        console.error('Error al actualizar evento:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al actualizar evento' });
+    }
+});
+
+// Inicio borrado evento
+app.delete('/api/eventos/:id', async (req, res) => {
+    try {
+        const id_evento = req.params.id;
+        const conexionPool = await promesaPool;
+        
+        await conexionPool.request()
+            .input('id_evento', sql.Int, id_evento)
+            .query('DELETE FROM Eventos_Historicos WHERE id_evento = @id_evento');
+
+        res.status(200).json({ mensaje: 'Evento eliminado exitosamente' });
+    } catch (error) {
+        console.error('Error al borrar evento:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al borrar evento' });
+    }
+});
+
+// Inicio servidor
 app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
     console.log(`📍 Accede a http://localhost:${PORT}`);

@@ -1,69 +1,85 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cronos UPLA - Autenticación</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
-    <div class="auth-container">
-        
-        <!-- Formulario de Login -->
-        <div class="auth-card" id="loginCard">
-            <h2 class="auth-title">Iniciar Sesión</h2>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="loginEmail">Correo Electrónico</label>
-                    <input type="email" id="loginEmail" class="form-control" required placeholder="tu@email.com">
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">Contraseña</label>
-                    <input type="password" id="loginPassword" class="form-control" required placeholder="********">
-                </div>
-                <button type="submit" class="btn">Entrar</button>
-            </form>
-            <div class="auth-toggle">
-                ¿No tienes cuenta? <a href="#" id="showRegister">Regístrate aquí</a>
-            </div>
-        </div>
+    <div class="auth-page">
+        <div class="auth-container">
 
-        <!-- Formulario de Registro -->
-        <div class="auth-card hidden" id="registerCard">
-            <h2 class="auth-title">Registro de Usuario</h2>
-            <form id="registerForm">
-                <div class="form-group">
-                    <label for="regRut">RUT (Sin puntos, con guión)</label>
-                    <input type="text" id="regRut" class="form-control" required placeholder="12345678-9" maxlength="12">
-                </div>
-                <div class="form-group">
-                    <label for="regNombre">Nombre Completo</label>
-                    <input type="text" id="regNombre" class="form-control" required placeholder="Ej: Juan Pérez">
-                </div>
-                <div class="form-group">
-                    <label for="regEmail">Correo Electrónico</label>
-                    <input type="email" id="regEmail" class="form-control" required placeholder="tu@email.com">
-                </div>
-                <div class="form-group">
-                    <label for="regPassword">Contraseña</label>
-                    <input type="password" id="regPassword" class="form-control" required placeholder="********">
-                </div>
-                <div class="form-group">
-                    <label for="reg-perfil">Perfil</label>
-                    <select id="reg-perfil" class="form-control" required>
-                        <option value="1">Docente</option>
-                        <option value="2">Estudiante</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn">Crear Cuenta</button>
-            </form>
-            <div class="auth-toggle">
-                ¿Ya tienes cuenta? <a href="#" id="showLogin">Inicia sesión</a>
-            </div>
-        </div>
+            <!-- Inicio logo -->
+            <header class="auth-header">
+                <img src="assets/img/escultura.png" alt="Cronos Logo" class="auth-logo">
+                <h1 class="auth-project-name">Cronos UPLA</h1>
+            </header>
 
+            <!-- Inicio login -->
+            <div class="auth-card" id="loginCard">
+                <h2 class="auth-title">Acceder al Archivo</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="loginEmail">Correo electrónico</label>
+                        <input type="email" id="loginEmail" class="form-control" required
+                            placeholder="investigador@cronos.cl">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Clave de Acceso</label>
+                        <input type="password" id="loginPassword" class="form-control" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn">Iniciar Viaje</button>
+                </form>
+                <div class="auth-toggle">
+                    ¿Nuevo investigador? <a href="#" id="showRegister">Inscribirse aquí</a>
+                </div>
+            </div>
+
+            <!-- Inicio registro -->
+            <div class="auth-card hidden" id="registerCard">
+                <h2 class="auth-title">Nuevo Registro</h2>
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="regRut">RUT Identificador</label>
+                        <input type="text" id="regRut" class="form-control" required placeholder="12.345.678-9"
+                            maxlength="12">
+                    </div>
+                    <div class="form-group">
+                        <label for="regNombre">Nombre del Investigador</label>
+                        <input type="text" id="regNombre" class="form-control" required
+                            placeholder="Ej: Heródoto de Halicarnaso">
+                    </div>
+                    <div class="form-group">
+                        <label for="regEmail">Correo de Contacto</label>
+                        <input type="email" id="regEmail" class="form-control" required placeholder="historia@upla.cl">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Establecer Clave</label>
+                        <input type="password" id="regPassword" class="form-control" required placeholder="••••••••">
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-perfil">Rango</label>
+                        <select id="reg-perfil" class="form-control" required>
+                            <option value="1">Docente</option>
+                            <option value="2">Estudiante</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">Crear Credenciales</button>
+                </form>
+                <div class="auth-toggle">
+                    ¿Ya tienes credenciales? <a href="#" id="showLogin">Entrar</a>
+                </div>
+            </div>
+
+        </div>
     </div>
+
+    <div id="toastContainer" class="toast-container"></div>
 
     <script src="app.js"></script>
 </body>
+
 </html>

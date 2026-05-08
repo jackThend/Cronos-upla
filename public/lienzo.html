@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronos UPLA - Lienzo Temporal</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-body">
+    
+    <div style="position: relative; z-index: 2; height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
+        <nav class="top-nav glass-panel" style="padding: 0.8rem 2rem;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <a href="explorador.html" style="color: #fff; text-decoration: none; font-size: 1.8rem; font-weight: bold; text-shadow: 0 0 10px rgba(255,255,255,0.5); transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">←</a>
+                <h1 id="lienzoEscenaTitulo" class="nav-title" style="margin:0; font-size: 1.6rem; text-shadow: 0 2px 10px rgba(0,0,0,0.8);">Cargando Escena...</h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <img src="assets/img/escultura.png" alt="Logo" style="height: 35px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.4));">
+            </div>
+        </nav>
+
+        <div class="canvas-scroll-area" id="canvasScrollArea" style="flex: 1;">
+            <div class="timeline-global-container" id="timelineGlobalContainer">
+                <!-- El eje temporal y los carriles se inyectarán aquí -->
+                <div style="display:flex; justify-content:center; align-items:center; height:100vh;">
+                    <h2 style="color: rgba(255,255,255,0.7); text-shadow: 0 2px 5px rgba(0,0,0,0.8); font-weight: 300;">Preparando el viaje en el tiempo...</h2>
+                </div>
+            </div>
+        </div>
+
+    <!-- Controles de Zoom Flotantes -->
+    <div class="zoom-controls">
+        <button id="btnZoomIn" class="zoom-btn" title="Acercar (Zoom In)">+</button>
+        <span id="zoomLabel" class="zoom-label">4 px/año</span>
+        <button id="btnZoomOut" class="zoom-btn" title="Alejar (Zoom Out)">−</button>
+    </div>
+
+    <!-- Modal de Evento (Oculto por defecto) -->
+    <div id="eventModalOverlay" class="modal-overlay hidden">
+        <div class="modal-content glass-panel">
+            <button id="btnCloseModal" class="modal-close">&times;</button>
+            <div id="modalImageContainer" class="modal-image-container"></div>
+            <div class="modal-body">
+                <span id="modalCategory" class="event-category" style="position: relative; display: inline-block; top: 0; right: 0; margin-bottom: 10px;"></span>
+                <h2 id="modalTitle" style="color: white; margin-bottom: 5px;"></h2>
+                <h3 id="modalYears" style="color: #f39c12; margin-bottom: 15px;"></h3>
+                <p id="modalDesc" style="color: rgba(255,255,255,0.8); line-height: 1.6;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notificaciones Toast -->
+    <div id="toastContainer" class="toast-container"></div>
+    </div> <!-- Cierre del wrapper z-index: 2 -->
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const cadenaUsuario = localStorage.getItem('usuario_cronos');
+            if(!cadenaUsuario) {
+                window.location.href = 'index.html';
+                return;
+            }
+            // Inicio parametros url
+            const parametrosUrl = new URLSearchParams(window.location.search);
+            const idEscena = parametrosUrl.get('id');
+            
+            if(!idEscena) {
+                window.location.href = 'explorador.html';
+                return;
+            }
+
+            if(window.cargarLienzo) {
+                window.cargarLienzo(idEscena);
+            }
+        });
+    </script>
+</body>
+</html>
