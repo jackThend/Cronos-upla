@@ -195,11 +195,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    accHeaderEscena.addEventListener('click', () => alternarAcordeon(accHeaderEscena, accContentEscena));
-    accHeaderLinea.addEventListener('click', () => {
+    if (accHeaderEscena) accHeaderEscena.addEventListener('click', () => alternarAcordeon(accHeaderEscena, accContentEscena));
+    if (accHeaderLinea) accHeaderLinea.addEventListener('click', () => {
         if (idEscenaActual) alternarAcordeon(accHeaderLinea, accContentLinea);
     });
-    accHeaderEvento.addEventListener('click', () => {
+    if (accHeaderEvento) accHeaderEvento.addEventListener('click', () => {
         if (idLineaActual) alternarAcordeon(accHeaderEvento, accContentEvento);
     });
 
@@ -552,6 +552,7 @@ window.mostrarNotificacion = function(mensajeNotificacion, esError = false) {
 if(!window.mostrarNotificacion) {
     window.mostrarNotificacion = (msj) => alert(msj);
 }
+window.showToast = window.mostrarNotificacion;
 
 // ==========================================
 // Inicio explorador
