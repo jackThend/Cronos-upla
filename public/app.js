@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById(targetId).classList.add('active');
 
             if (targetId === 'tab-gestor') {
-                loadMisEscenas();
+                cargarMisEscenas();
                 document.getElementById('gestorListaEscenas').classList.remove('hidden');
                 document.getElementById('gestorEdicionProfunda').classList.add('hidden');
             }
