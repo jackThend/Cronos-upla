@@ -558,7 +558,7 @@ table tr:hover {
 
 .scenes-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 2.5rem;
 }
 
@@ -581,7 +581,9 @@ table tr:hover {
 .scene-card h3 {
     font-size: 1.5rem;
     margin-bottom: 1rem;
-    font-weight: 600;
+    font-weight: 800;
+    color: #111111;
+    text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
 }
 
 .scene-card p {
@@ -681,6 +683,12 @@ table tr:hover {
     height: 10px;
     background: rgba(255,255,255,0.5);
     margin-top: 5px;
+}
+
+.minor-tick::after {
+    height: 5px;
+    background: rgba(255,255,255,0.25);
+    margin-top: 0;
 }
 
 .lane-track {

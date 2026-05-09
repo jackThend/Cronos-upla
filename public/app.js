@@ -471,12 +471,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             datos.resultados.forEach(escena => {
                 const tarjeta = document.createElement('div');
-                tarjeta.className = 'scene-card';
+                tarjeta.className = 'scene-card glass-panel';
+                tarjeta.style.cursor = 'pointer';
+                tarjeta.onclick = () => window.location.href = `lienzo.html?id=${escena.id_escena}`;
                 tarjeta.innerHTML = `
                     <div class="scene-card-content">
                         <h3>${escena.nombre_escena}</h3>
                         <p style="color: #ccc; font-size: 0.9rem;">Escena Crono-Espacial</p>
-                        <button class="btn" onclick="window.abrirEdicionProfunda(${escena.id_escena}, '${escena.nombre_escena.replace(/'/g, "\\'")}')">Editar Escena</button>
+                        <button class="btn" onclick="event.stopPropagation(); window.abrirEdicionProfunda(${escena.id_escena}, '${escena.nombre_escena.replace(/'/g, "\\'")}')">Editar Escena</button>
                     </div>
                 `;
                 grilla.appendChild(tarjeta);
@@ -506,21 +508,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Soporte futuro backend
     document.getElementById('formRenombrarEscena')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        showToast("Funcionalidad de renombrar en construcción (requiere backend).", true);
-        /*
         const id = document.getElementById('idEscenaRenombrar').value;
-        const nombre = document.getElementById('inputRenombrarEscena').value;
+        const nombre = document.getElementById('inputRenombrarEscena').value.trim();
+        
+        if (!nombre) {
+            window.mostrarNotificacion("El nombre no puede estar vacío", true);
+            return;
+        }
+
         try {
             const res = await fetch(`${API_URL}/escenas/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ nombre_escena: nombre })
             });
-            showToast("Escena actualizada");
+            await manejarRespuesta(res);
+            window.mostrarNotificacion("Escena actualizada exitosamente");
+            document.getElementById('tituloEdicionEscena').textContent = `Editando Escena: ${nombre}`;
+            cargarMisEscenas(); // Recargar lista para reflejar el cambio
         } catch(err) {
-            showToast(err.message, true);
+            window.mostrarNotificacion(err.message, true);
         }
-        */
     });
 
 });
@@ -564,26 +572,29 @@ window.cargarExplorador = async function() {
     const buscador = document.getElementById('buscadorEscenas');
     if(!grilla) return;
     
-    try {
-        const respuesta = await fetch(`${API_URL}/escenas`);
-        const datos = await manejarRespuesta(respuesta);
-        
-        window.todasLasEscenas = datos.resultados || [];
-        renderizarEscenas(window.todasLasEscenas);
-        
-        if (buscador) {
-            buscador.addEventListener('input', (e) => {
-                const termino = e.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const filtradas = window.todasLasEscenas.filter(escena => {
-                    const nombreNormalizado = escena.nombre_escena.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    return nombreNormalizado.includes(termino);
-                });
-                renderizarEscenas(filtradas);
-            });
+    const cargarDatos = async (termino = '') => {
+        try {
+            grilla.innerHTML = '<p style="text-align:center; color: #ccc; grid-column: 1 / -1;">Cargando escenas...</p>';
+            const respuesta = await fetch(`${API_URL}/escenas${termino ? `?q=${encodeURIComponent(termino)}` : ''}`);
+            const datos = await manejarRespuesta(respuesta);
+            renderizarEscenas(datos.resultados || []);
+        } catch(error) {
+            grilla.innerHTML = `<p style="color: #ff6b6b; text-align: center; grid-column: 1 / -1;">Error al cargar las escenas: ${error.message}</p>`;
         }
-        
-    } catch(error) {
-        grilla.innerHTML = `<p style="color: #ff6b6b; text-align: center; grid-column: 1 / -1;">Error al cargar las escenas: ${error.message}</p>`;
+    };
+
+    // Carga inicial
+    await cargarDatos();
+    
+    if (buscador) {
+        let timeoutBusqueda;
+        buscador.addEventListener('input', (e) => {
+            clearTimeout(timeoutBusqueda);
+            // Debounce para evitar sobrecargar el servidor
+            timeoutBusqueda = setTimeout(() => {
+                cargarDatos(e.target.value.trim());
+            }, 300);
+        });
     }
 };
 
@@ -621,7 +632,7 @@ let _anioMin = 0;
 let _anioMax = 0;               
 let _escala = 4;                
 const _ESCALA_MIN = 0.5;        
-const _ESCALA_MAX = 40;         
+const _ESCALA_MAX = 150;         
 const _SUBLANE_H = 55;          
 const _CINTA_H = 34;            
 const _CINTA_OFFSET_TOP = 10;   
@@ -629,7 +640,8 @@ const _CINTA_OFFSET_TOP = 10;
 // Calculo intervalo ideal
 function _calcularIntervalo() {
     const pxPorAnio = _escala;
-    const aniosPorMarca = 120 / pxPorAnio;
+    // Inicio asignacion proporcion
+    const aniosPorMarca = 80 / pxPorAnio; 
     const escalones = [1, 2, 5, 10, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
     for (let i = 0; i < escalones.length; i++) {
         if (escalones[i] >= aniosPorMarca) return escalones[i];
@@ -671,12 +683,36 @@ function _renderizarLineasDeTiempo() {
     const interv = _calcularIntervalo();
     const primeraMarca = Math.ceil(minimoAnio / interv) * interv;
 
+    // Inicio calculo submarcas
+    let subInterv = interv;
+    const posiblesSubInterv = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000];
+    for (let i = posiblesSubInterv.length - 1; i >= 0; i--) {
+        const val = posiblesSubInterv[i];
+        if (val < interv && (interv % val === 0)) {
+            // Inicio validacion espacio visual
+            if ((val * _escala) >= 15) { 
+                subInterv = val;
+            }
+        }
+    }
+
     for (let anio = primeraMarca; anio <= maximoAnio; anio += interv) {
+        // Inicio renderizado marca principal
         const marcaTiempo = document.createElement('div');
         marcaTiempo.className = 'time-marker';
         marcaTiempo.textContent = _formatearAnio(anio);
         marcaTiempo.style.left = `${anioPixeles(anio)}px`;
         reglaTemporal.appendChild(marcaTiempo);
+
+        // Inicio renderizado submarcas
+        if (subInterv < interv) {
+            for (let subAnio = anio + subInterv; subAnio < anio + interv && subAnio <= maximoAnio; subAnio += subInterv) {
+                const subMarca = document.createElement('div');
+                subMarca.className = 'time-marker minor-tick';
+                subMarca.style.left = `${anioPixeles(subAnio)}px`;
+                reglaTemporal.appendChild(subMarca);
+            }
+        }
     }
     contenedorGlobal.appendChild(reglaTemporal);
 
@@ -738,28 +774,60 @@ function _renderizarLineasDeTiempo() {
                     }
                 }
 
-                const pixelesArriba = _CINTA_OFFSET_TOP + subcarril * _SUBLANE_H;
-
-                // Renderizado grupo
                 const grupo = document.createElement('div');
                 grupo.className = 'event-group';
                 grupo.style.left = `${inicioX}px`;
-                grupo.style.top = `${pixelesArriba}px`;
-                // Guardado coordenadas
-                grupo.dataset.startX  = String(inicioX);
-                grupo.dataset.anchoCinta = String(cintaAncho);
+                grupo.style.top = `${_CINTA_OFFSET_TOP + (subcarril * _SUBLANE_H)}px`;
+                grupo.style.width = `${cintaAncho}px`;
+                grupo.style.height = `${_CINTA_H}px`;
 
-                // Renderizado cinta
-                const cintaColor = document.createElement('div');
-                cintaColor.className = 'event-ribbon';
-                cintaColor.style.width = `${cintaAncho}px`;
-                cintaColor.style.backgroundColor = linea.color_personalizado;
-                cintaColor.title = `${evento.titulo_evento} (${evento.anio_inicio}${evento.anio_fin ? ' – ' + evento.anio_fin : ''})`;
+                // Inicio renderizado linea guia
+                grupo.onmouseenter = () => {
+                    let guiaGlobal = document.getElementById('globalGuideLine');
+                    if (!guiaGlobal) {
+                        guiaGlobal = document.createElement('div');
+                        guiaGlobal.id = 'globalGuideLine';
+                        guiaGlobal.style.position = 'absolute';
+                        guiaGlobal.style.width = '1px';
+                        guiaGlobal.style.borderLeft = '1px dashed rgba(255, 255, 255, 0.6)';
+                        guiaGlobal.style.pointerEvents = 'none';
+                        // Inicio aplicacion indice z
+                        guiaGlobal.style.zIndex = '1'; 
+                        document.getElementById('timelineGlobalContainer').appendChild(guiaGlobal);
+                    }
+                    
+                    // Inicio calculo coordenadas
+                    const rectGrupo = grupo.getBoundingClientRect();
+                    const contenedorGlobal = document.getElementById('timelineGlobalContainer');
+                    const rectGlobal = contenedorGlobal.getBoundingClientRect();
+                    const ruler = document.querySelector('.time-ruler');
+                    const rectRuler = ruler ? ruler.getBoundingClientRect() : rectGlobal;
+                    
+                    const xLocal = rectGrupo.left - rectGlobal.left;
+                    const yLocal = rectRuler.bottom - rectGlobal.top;
+                    const altoLinea = rectGrupo.top - rectRuler.bottom;
+                    
+                    guiaGlobal.style.left = `${xLocal}px`;
+                    guiaGlobal.style.top = `${yLocal}px`;
+                    guiaGlobal.style.height = `${altoLinea}px`;
+                    guiaGlobal.style.display = 'block';
+                };
+                grupo.onmouseleave = () => {
+                    const guiaGlobal = document.getElementById('globalGuideLine');
+                    if (guiaGlobal) guiaGlobal.style.display = 'none';
+                };
 
-                // Renderizado etiqueta
+                // Cinta
+                const cinta = document.createElement('div');
+                cinta.className = 'event-ribbon';
+                cinta.style.width = `${cintaAncho}px`;
+                cinta.style.backgroundColor = linea.color_personalizado;
+                cinta.title = `${evento.titulo_evento} (${_formatearAnio(evento.anio_inicio)}${evento.anio_fin ? ' – ' + _formatearAnio(evento.anio_fin) : ''})`;
+
+                // Etiqueta flotante interior
                 const etiqueta = document.createElement('div');
                 etiqueta.className = 'ribbon-label';
-                etiqueta.textContent = evento.titulo_evento;
+                etiqueta.textContent = `${evento.titulo_evento} (${_formatearAnio(evento.anio_inicio)})`;
 
                 // Inicio click evento
                 grupo.addEventListener('click', (e) => {
@@ -767,7 +835,7 @@ function _renderizarLineasDeTiempo() {
                     _abrirModal(evento, linea.color_personalizado);
                 });
 
-                grupo.appendChild(cintaColor);
+                grupo.appendChild(cinta);
                 grupo.appendChild(etiqueta);
                 pistaCarril.appendChild(grupo);
             });

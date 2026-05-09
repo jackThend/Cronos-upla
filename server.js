@@ -201,13 +201,43 @@ app.post('/api/eventos', async (req, res) => {
 // Inicio listado escenas globales (para explorador)
 app.get('/api/escenas', async (req, res) => {
     try {
+        const { q } = req.query;
         const conexionPool = await promesaPool;
-        const resultado = await conexionPool.request().query('SELECT * FROM Escenas_Crono');
+        let query = 'SELECT TOP 20 * FROM Escenas_Crono';
+        let request = conexionPool.request();
+
+        if (q) {
+            query += ' WHERE nombre_escena LIKE @q';
+            request.input('q', sql.VarChar, `%${q}%`);
+        }
+        
+        query += ' ORDER BY id_escena DESC';
+        
+        const resultado = await request.query(query);
         res.status(200).json({ resultados: resultado.recordset });
     } catch (error) {
         console.error('Error al buscar escenas:', error.message);
         console.error(error);
         res.status(500).json({ error: 'Error interno del servidor al buscar escenas' });
+    }
+});
+
+// Inicio renombrado de escena
+app.put('/api/escenas/:id', async (req, res) => {
+    try {
+        const { nombre_escena } = req.body;
+        if (!nombre_escena) return res.status(400).json({ error: 'El nombre de la escena es requerido' });
+        
+        const conexionPool = await promesaPool;
+        await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .input('nombre_escena', sql.VarChar, nombre_escena)
+            .query('UPDATE Escenas_Crono SET nombre_escena = @nombre_escena WHERE id_escena = @id');
+            
+        res.status(200).json({ mensaje: 'Escena actualizada exitosamente' });
+    } catch (error) {
+        console.error('Error al renombrar escena:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al actualizar escena' });
     }
 });
 
