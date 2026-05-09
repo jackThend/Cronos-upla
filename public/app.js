@@ -208,8 +208,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!document.getElementById('escenaGlobal')) return;
         
         try {
-            // Carga escenas
-            const respEscenas = await fetch(`${API_URL}/escenas`);
+            // Carga escenas (solo del usuario)
+            const respEscenas = await fetch(`${API_URL}/escenas/usuario/${rutUsuario}`);
             const datosEscenas = await manejarRespuesta(respEscenas);
             const selectorEscena = document.getElementById('escenaGlobal');
             selectorEscena.innerHTML = '<option value="">-- Seleccionar Escena Existente --</option>';
@@ -221,9 +221,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             const respZonas = await fetch(`${API_URL}/zonas`);
             const datosZonas = await manejarRespuesta(respZonas);
             const selectorZona = document.getElementById('zonaSeleccionada');
-            selectorZona.innerHTML = '<option value="">-- Seleccionar Zona --</option>';
+            selectorZona.innerHTML = '<option value="">-- Seleccionar Continente --</option>';
             datosZonas.resultados.forEach(z => {
-                selectorZona.innerHTML += `<option value="${z.id_zona}">${z.nombre_zona} (${z.continente})</option>`;
+                selectorZona.innerHTML += `<option value="${z.id_zona}">${z.nombre_zona}</option>`;
             });
 
             // Carga categorias
@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!grilla) return;
         
         try {
-            const respuesta = await fetch(`${API_URL}/escenas`);
+            const respuesta = await fetch(`${API_URL}/escenas/usuario/${rutUsuario}`);
             const datos = await manejarRespuesta(respuesta);
             grilla.innerHTML = '';
             
@@ -475,7 +475,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tarjeta.innerHTML = `
                     <div class="scene-card-content">
                         <h3>${escena.nombre_escena}</h3>
-                        <p>ID: ${escena.id_escena}</p>
+                        <p style="color: #ccc; font-size: 0.9rem;">Escena Crono-Espacial</p>
                         <button class="btn" onclick="window.abrirEdicionProfunda(${escena.id_escena}, '${escena.nombre_escena.replace(/'/g, "\\'")}')">Editar Escena</button>
                     </div>
                 `;

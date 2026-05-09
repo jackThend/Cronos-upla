@@ -115,15 +115,19 @@ app.post('/api/escenas', async (req, res) => {
         }
 
         const conexionPool = await promesaPool;
-        await conexionPool.request()
+        const insertRes = await conexionPool.request()
             .input('nombre_escena', sql.VarChar, nombre_escena)
             .input('rut_usuario', sql.VarChar, rut_usuario)
             .query(`
                 INSERT INTO Escenas_Crono (nombre_escena, rut_usuario)
+                OUTPUT INSERTED.id_escena
                 VALUES (@nombre_escena, @rut_usuario)
             `);
 
-        res.status(201).json({ mensaje: 'Escena creada exitosamente' });
+        res.status(201).json({ 
+            mensaje: 'Escena creada exitosamente',
+            id_escena: insertRes.recordset[0].id_escena
+        });
     } catch (error) {
         console.error('Error al crear escena:', error.message);
         console.error(error);
@@ -141,17 +145,21 @@ app.post('/api/lineas', async (req, res) => {
         }
 
         const conexionPool = await promesaPool;
-        await conexionPool.request()
+        const insertRes = await conexionPool.request()
             .input('id_escena', sql.Int, id_escena)
             .input('id_zona', sql.Int, id_zona)
             .input('nombre_linea', sql.VarChar, nombre_linea)
             .input('color_personalizado', sql.VarChar, color_personalizado)
             .query(`
                 INSERT INTO Lineas_Tiempo (id_escena, id_zona, nombre_linea, color_personalizado)
+                OUTPUT INSERTED.id_linea
                 VALUES (@id_escena, @id_zona, @nombre_linea, @color_personalizado)
             `);
 
-        res.status(201).json({ mensaje: 'Línea de tiempo creada exitosamente' });
+        res.status(201).json({ 
+            mensaje: 'Línea de tiempo creada exitosamente',
+            id_linea: insertRes.recordset[0].id_linea
+        });
     } catch (error) {
         console.error('Error al crear línea:', error.message);
         console.error(error);
@@ -190,7 +198,7 @@ app.post('/api/eventos', async (req, res) => {
     }
 });
 
-// Inicio listado escenas
+// Inicio listado escenas globales (para explorador)
 app.get('/api/escenas', async (req, res) => {
     try {
         const conexionPool = await promesaPool;
@@ -199,6 +207,20 @@ app.get('/api/escenas', async (req, res) => {
     } catch (error) {
         console.error('Error al buscar escenas:', error.message);
         console.error(error);
+        res.status(500).json({ error: 'Error interno del servidor al buscar escenas' });
+    }
+});
+
+// Inicio listado escenas por usuario (para dashboard)
+app.get('/api/escenas/usuario/:rut', async (req, res) => {
+    try {
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request()
+            .input('rut', sql.VarChar, req.params.rut)
+            .query('SELECT * FROM Escenas_Crono WHERE rut_usuario = @rut');
+        res.status(200).json({ resultados: resultado.recordset });
+    } catch (error) {
+        console.error('Error al buscar escenas de usuario:', error.message);
         res.status(500).json({ error: 'Error interno del servidor al buscar escenas' });
     }
 });
