@@ -869,19 +869,13 @@ function _abrirModal(evento, colorLinea) {
 
     if (!capa) return;
 
-    // Imagen del evento en el modal
+    // Inicio renderizado de imagen modal
     if (evento.imagen_url && evento.imagen_url.trim() !== '') {
-        contenedorImg.setAttribute('style',
-            `display: block !important;
-             background-image: url('${evento.imagen_url}');
-             background-size: cover;
-             background-position: center;
-             width: 100%;
-             height: 220px;
-             border-radius: 16px 16px 0 0;`
-        );
+        contenedorImg.innerHTML = `<img src="${evento.imagen_url.trim()}" alt="${evento.titulo_evento}" style="width: 100%; height: 220px; object-fit: cover; border-radius: 20px 20px 0 0; display: block;">`;
+        contenedorImg.style.display = 'block';
     } else {
-        contenedorImg.setAttribute('style', 'display: none !important;');
+        contenedorImg.innerHTML = '';
+        contenedorImg.style.display = 'none';
     }
 
     // Color del borde superior del modal según línea
