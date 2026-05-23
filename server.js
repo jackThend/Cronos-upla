@@ -414,6 +414,56 @@ app.delete('/api/eventos/:id', async (req, res) => {
         res.status(500).json({ error: 'Error interno del servidor al borrar evento' });
     }
 });
+// Fin borrado evento
+
+// Inicio borrado linea
+app.delete('/api/lineas/:id', async (req, res) => {
+    try {
+        const id_linea = req.params.id;
+        const conexionPool = await promesaPool;
+        
+        await conexionPool.request()
+            .input('id_linea', sql.Int, id_linea)
+            .query('DELETE FROM Eventos_Historicos WHERE id_linea = @id_linea');
+            
+        await conexionPool.request()
+            .input('id_linea', sql.Int, id_linea)
+            .query('DELETE FROM Lineas_Tiempo WHERE id_linea = @id_linea');
+
+        res.status(200).json({ mensaje: 'Linea eliminada exitosamente' });
+    } catch (error) {
+        console.error('Error al borrar linea:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al borrar linea' });
+    }
+});
+// Fin borrado linea
+
+// Inicio borrado escena
+app.delete('/api/escenas/:id', async (req, res) => {
+    try {
+        const id_escena = req.params.id;
+        const conexionPool = await promesaPool;
+        
+        await conexionPool.request()
+            .input('id_escena', sql.Int, id_escena)
+            .query('DELETE FROM Eventos_Historicos WHERE id_linea IN (SELECT id_linea FROM Lineas_Tiempo WHERE id_escena = @id_escena)');
+            
+        await conexionPool.request()
+            .input('id_escena', sql.Int, id_escena)
+            .query('DELETE FROM Lineas_Tiempo WHERE id_escena = @id_escena');
+            
+        await conexionPool.request()
+            .input('id_escena', sql.Int, id_escena)
+            .query('DELETE FROM Escenas_Crono WHERE id_escena = @id_escena');
+
+        res.status(200).json({ mensaje: 'Escena eliminada exitosamente' });
+    } catch (error) {
+        console.error('Error al borrar escena:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al borrar escena' });
+    }
+});
+// Fin borrado escena
+
 
 // Inicio servidor
 app.listen(PORT, () => {

@@ -299,6 +299,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // -- Mostrar/Ocultar boton borrar linea --
+    document.getElementById('lineaGlobal')?.addEventListener('change', (e) => {
+        const btnBorrar = document.getElementById('btnBorrarLinea');
+        if(btnBorrar) {
+            if(e.target.value) btnBorrar.classList.remove('hidden');
+            else btnBorrar.classList.add('hidden');
+        }
+    });
+
     // -- NIVEL 2: Fijacion Linea --
     document.getElementById('btnFijarLinea')?.addEventListener('click', async () => {
         const selectorLinea = document.getElementById('lineaGlobal').value;
@@ -451,6 +460,103 @@ document.addEventListener('DOMContentLoaded', async () => {
             showToast(`Error: ${error.message}`, true);
         }
     };
+
+    // Inicio borrado linea
+    window.borrarLineaC = async function() {
+        const id_linea = document.getElementById('lineaGlobal').value;
+        if (!id_linea) return;
+
+        if (!confirm('¿Estás completamente seguro de que deseas borrar esta línea y todos sus eventos? Esta acción no se puede deshacer.')) return;
+
+        try {
+            const respuesta = await fetch(`${API_URL}/lineas/${id_linea}`, { method: 'DELETE' });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            
+            await cargarLineasNivel2(idEscenaActual);
+            document.getElementById('formLinea').reset();
+            const btnBorrarLinea = document.getElementById('btnBorrarLinea');
+            if(btnBorrarLinea) btnBorrarLinea.classList.add('hidden');
+            
+            document.getElementById('tablaEventosConstructor').querySelector('tbody').innerHTML = '<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5);">No hay eventos aún.</td></tr>';
+            idLineaActual = null;
+            
+            const accHeaderEvento = document.getElementById('acc-header-evento');
+            if(accHeaderEvento) {
+                accHeaderEvento.style.pointerEvents = 'none';
+                accHeaderEvento.style.opacity = '0.5';
+                accHeaderEvento.innerHTML = `3. Eventos Históricos <span>▼</span>`;
+                document.getElementById('acc-content-evento').classList.remove('open');
+            }
+            
+            const accHeaderLinea = document.getElementById('acc-header-linea');
+            if(accHeaderLinea) {
+                accHeaderLinea.innerHTML = `2. Línea de Tiempo <span>▼</span>`;
+            }
+
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    };
+    // Fin borrado linea
+
+    // Inicio borrado escena
+    window.borrarEscenaC = async function() {
+        const inputId = document.getElementById('idEscenaRenombrar');
+        if(!inputId) return;
+        const id_escena = inputId.value;
+        if (!id_escena) return;
+
+        if (!confirm('¡ADVERTENCIA! ¿Estás completamente seguro de que deseas borrar esta ESCENA COMPLETA? Se perderán todas sus líneas y eventos para siempre.')) return;
+
+        try {
+            const respuesta = await fetch(`${API_URL}/escenas/${id_escena}`, { method: 'DELETE' });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            
+            document.getElementById('gestorEdicionProfunda').classList.add('hidden');
+            document.getElementById('gestorListaEscenas').classList.remove('hidden');
+            
+            renderizarMisEscenas();
+            cargarEscenasGlobal();
+            
+            if (idEscenaActual == id_escena) {
+                idEscenaActual = null;
+                idLineaActual = null;
+                document.getElementById('formEscena').reset();
+                document.getElementById('formLinea').reset();
+                document.getElementById('formEvento').reset();
+                const btnBorrarLinea = document.getElementById('btnBorrarLinea');
+                if(btnBorrarLinea) btnBorrarLinea.classList.add('hidden');
+                
+                const accHeaderLinea = document.getElementById('acc-header-linea');
+                if(accHeaderLinea) {
+                    accHeaderLinea.style.pointerEvents = 'none';
+                    accHeaderLinea.style.opacity = '0.5';
+                    accHeaderLinea.innerHTML = `2. Línea de Tiempo <span>▼</span>`;
+                    document.getElementById('acc-content-linea').classList.remove('open');
+                }
+                
+                const accHeaderEvento = document.getElementById('acc-header-evento');
+                if(accHeaderEvento) {
+                    accHeaderEvento.style.pointerEvents = 'none';
+                    accHeaderEvento.style.opacity = '0.5';
+                    accHeaderEvento.innerHTML = `3. Eventos Históricos <span>▼</span>`;
+                    document.getElementById('acc-content-evento').classList.remove('open');
+                }
+                
+                const accHeaderEscena = document.getElementById('acc-header-escena');
+                if(accHeaderEscena) {
+                    accHeaderEscena.innerHTML = `1. Escena Crono <span>▼</span>`;
+                    document.getElementById('acc-content-escena').classList.add('open');
+                }
+            }
+
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    };
+    // Fin borrado escena
 
     // ========================================================
     // Inicio gestor escenas

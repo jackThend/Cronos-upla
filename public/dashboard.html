@@ -94,7 +94,10 @@
                                         <input type="color" id="colorLinea" class="form-control color-input" value="#4a90e2">
                                     </div>
                                 </div>
-                                <button type="button" id="btnFijarLinea" class="btn" style="margin-top: 15px;">Fijar Línea y Continuar</button>
+                                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                    <button type="button" id="btnFijarLinea" class="btn" style="flex: 2;">Fijar Línea y Continuar</button>
+                                    <button type="button" id="btnBorrarLinea" class="btn hidden" style="flex: 1; background: #e74c3c;" onclick="window.borrarLineaC()">Eliminar Línea Seleccionada</button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -192,7 +195,10 @@
                                 <input type="text" id="inputRenombrarEscena" class="form-control" required>
                             </div>
                         </div>
-                        <button type="submit" class="btn" style="margin-top: 15px;">Actualizar Nombre</button>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button type="submit" class="btn" style="flex: 2;">Actualizar Nombre</button>
+                            <button type="button" id="btnBorrarEscena" class="btn" style="flex: 1; background: #e74c3c;" onclick="window.borrarEscenaC()">Eliminar Escena Completa</button>
+                        </div>
                     </form>
                 </div>
             </div>
