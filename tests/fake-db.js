@@ -114,7 +114,10 @@ function ejecutar(texto, p) {
             titulo_evento: p.titulo_evento,
             anio_inicio: p.anio_inicio,
             anio_fin: p.anio_fin,
+            id_categoria: p.id_categoria,
+            descripcion: p.descripcion,
             precision_fecha: p.precision_fecha,
+            interpretacion: p.interpretacion,
             fuente_url: p.fuente_url
         });
         return filas([{ id_evento }]);
@@ -154,7 +157,7 @@ function ejecutar(texto, p) {
         const ids = (t.match(/IN \(([\d,]+)\)/)?.[1] || '').split(',').map(Number);
         return filas(estado.eventos.filter(e => ids.includes(e.id_linea)).map(e => ({
             ...e,
-            nombre_categoria: estado.categorias[0]?.nombre_categoria
+            nombre_categoria: estado.categorias.find(c => c.id_categoria === e.id_categoria)?.nombre_categoria
         })));
     }
 
@@ -183,7 +186,7 @@ function ejecutar(texto, p) {
 
     if (t.includes('INSERT INTO Fuentes_Evento')) {
         const id_fuente = siguiente();
-        estado.fuentes.push({ id_fuente, id_evento: Number(p.id_evento), titulo: p.titulo, tipo: p.tipo });
+        estado.fuentes.push({ id_fuente, id_evento: Number(p.id_evento), titulo: p.titulo, autor: p.autor, anio: p.anio, url: p.url, tipo: p.tipo });
         return filas([{ id_fuente }]);
     }
     if (t.includes('SELECT id_evento FROM Fuentes_Evento')) {

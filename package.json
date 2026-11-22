@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test tests/api.test.js tests/analisis.test.js",
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "demo": "node tests/demo.js"
   },
   "keywords": [],
   "author": "",

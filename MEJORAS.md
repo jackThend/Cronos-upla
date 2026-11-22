@@ -46,6 +46,7 @@
 - [x] ~~Escala de larga duración (logarítmica)~~
 
 ## Pendiente o por verificar
-- [ ] Probar el lienzo en el navegador: arcos, cursor, modo relativo, presentación y ficha. Las pruebas automáticas no cubren la interfaz.
-- [ ] Exportar y importar las relaciones y las fuentes en JSON/CSV. Hoy solo se exportan los eventos con su precisión e interpretación.
+- [x] ~~Probar el lienzo en el navegador: arcos, cursor, modo relativo, presentación, búsqueda, análisis y filtros~~ (verificado con `npm run demo`; la captura visual no estuvo disponible, así que el diseño no se revisó a ojo)
+- [x] ~~Exportar y importar relaciones, fuentes y preguntas en JSON~~ (en CSV no; el formato CSV solo lleva eventos, precisión e interpretación)
 - [ ] Validar en la práctica la calidad de las relaciones que propone la IA; el sistema las acepta solo si los títulos existen, pero no evalúa si el vínculo histórico es correcto.
+- [ ] Revisión visual del lienzo y del dashboard en pantalla (diseño, legibilidad de los arcos y de las etiquetas).

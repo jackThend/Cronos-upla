@@ -1153,7 +1153,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const respuesta = await fetch(`${API_URL}/escenas/importar`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre_escena: nombreEscena, rut_usuario: rutUsuario, lineas: escena.lineas })
+                body: JSON.stringify({
+                    nombre_escena: nombreEscena,
+                    rut_usuario: rutUsuario,
+                    lineas: escena.lineas,
+                    relaciones: escena.relaciones || [],
+                    preguntas: escena.preguntas || []
+                })
             });
             const datos = await manejarRespuesta(respuesta);
             showToast(datos.mensaje);
@@ -1168,9 +1174,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function obtenerEscenaParaExportar(idEscena) {
         const respuesta = await fetch(`${API_URL}/escenas/${idEscena}/detalle`);
         const escena = await manejarRespuesta(respuesta);
+        const titulos = new Map(escena.lineas.flatMap(l => (l.eventos || []).map(e => [e.id_evento, e.titulo_evento])));
         return {
             formato: 'cronos-escena',
-            version: 1,
+            version: 2,
+            relaciones: (escena.relaciones || []).map(r => ({
+                titulo_origen: titulos.get(r.id_evento_origen),
+                titulo_destino: titulos.get(r.id_evento_destino),
+                tipo: r.tipo,
+                nota: r.nota
+            })),
+            preguntas: (escena.preguntas || []).map(p => p.texto),
             nombre_escena: escena.nombre_escena,
             lineas: escena.lineas.map(linea => ({
                 nombre_linea: linea.nombre_linea,
@@ -1185,7 +1199,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     imagen_url: evento.imagen_url,
                     fuente_url: evento.fuente_url,
                     precision_fecha: evento.precision_fecha,
-                    interpretacion: evento.interpretacion
+                    interpretacion: evento.interpretacion,
+                    fuentes: (evento.fuentes || []).map(f => ({ titulo: f.titulo, autor: f.autor, anio: f.anio, url: f.url, tipo: f.tipo }))
                 }))
             }))
         };

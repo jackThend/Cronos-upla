@@ -677,6 +677,18 @@ async function validarLineas(conexionPool, lineas) {
                 throw errorValidacion(`${etiquetaEvento}: la fuente debe ser una URL http(s)`);
             }
 
+            const fuentes = (Array.isArray(evento.fuentes) ? evento.fuentes : []).map(fuente => {
+                if (!fuente.titulo || String(fuente.titulo).length > 200 || !TIPOS_FUENTE.includes(fuente.tipo)) {
+                    throw errorValidacion(`${etiquetaEvento}: una fuente necesita título y un tipo válido`);
+                }
+                if (fuente.url && (String(fuente.url).length > 500 || !/^https?:\/\//i.test(fuente.url))) {
+                    throw errorValidacion(`${etiquetaEvento}: la URL de una fuente debe ser http(s)`);
+                }
+                const anio = aEntero(fuente.anio);
+                if (anio !== null && !Number.isInteger(anio)) throw errorValidacion(`${etiquetaEvento}: el año de una fuente no es válido`);
+                return { titulo: fuente.titulo, autor: fuente.autor || null, anio, url: fuente.url || null, tipo: fuente.tipo };
+            });
+
             const precision_fecha = evento.precision_fecha || 'exacta';
             if (!PRECISIONES.includes(precision_fecha)) throw errorValidacion(`${etiquetaEvento}: la precisión "${precision_fecha}" no es válida`);
 
@@ -689,7 +701,8 @@ async function validarLineas(conexionPool, lineas) {
                 imagen_url: evento.imagen_url || null,
                 fuente_url,
                 precision_fecha,
-                interpretacion: evento.interpretacion || null
+                interpretacion: evento.interpretacion || null,
+                fuentes
             };
         });
 
@@ -740,6 +753,20 @@ async function insertarLineas(transaccion, id_escena, lineasValidas) {
                     VALUES (@id_linea, @id_categoria, @titulo_evento, @anio_inicio, @anio_fin, @descripcion, @imagen_url, @fuente_url, @precision_fecha, @interpretacion)
                 `);
             insertados.set(evento.titulo_evento.toLowerCase(), eventoRes.recordset[0].id_evento);
+
+            for (const fuente of evento.fuentes || []) {
+                await new sql.Request(transaccion)
+                    .input('id_evento', sql.Int, eventoRes.recordset[0].id_evento)
+                    .input('titulo', sql.VarChar, fuente.titulo)
+                    .input('autor', sql.VarChar, fuente.autor)
+                    .input('anio', sql.Int, fuente.anio)
+                    .input('url', sql.VarChar, fuente.url)
+                    .input('tipo', sql.VarChar, fuente.tipo)
+                    .query(`
+                        INSERT INTO Fuentes_Evento (id_evento, titulo, autor, anio, url, tipo)
+                        VALUES (@id_evento, @titulo, @autor, @anio, @url, @tipo)
+                    `);
+            }
         }
     }
     return insertados;
@@ -805,7 +832,7 @@ async function obtenerEscenaDeUsuario(conexionPool, id_escena, rut_usuario) {
     return resultado.recordset[0] || null;
 }
 
-async function crearEscenaCompleta(conexionPool, { nombre_escena, rut_usuario, lineas }) {
+async function crearEscenaCompleta(conexionPool, { nombre_escena, rut_usuario, lineas, relaciones, preguntas }) {
     if (!nombre_escena || !rut_usuario) {
         throw errorValidacion('nombre_escena y rut_usuario son requeridos');
     }
@@ -825,7 +852,8 @@ async function crearEscenaCompleta(conexionPool, { nombre_escena, rut_usuario, l
                 VALUES (@nombre_escena, @rut_usuario)
             `);
         const id_escena = escenaRes.recordset[0].id_escena;
-        await insertarLineas(transaccion, id_escena, lineasValidas);
+        const insertados = await insertarLineas(transaccion, id_escena, lineasValidas);
+        await insertarRelacionesYPreguntas(transaccion, id_escena, relaciones, preguntas, insertados);
         return id_escena;
     });
 }
@@ -833,9 +861,9 @@ async function crearEscenaCompleta(conexionPool, { nombre_escena, rut_usuario, l
 // Inicio importacion escena
 app.post('/api/escenas/importar', async (req, res) => {
     try {
-        const { nombre_escena, rut_usuario, lineas } = req.body;
+        const { nombre_escena, rut_usuario, lineas, relaciones, preguntas } = req.body;
         const conexionPool = await promesaPool;
-        const id_escena = await crearEscenaCompleta(conexionPool, { nombre_escena, rut_usuario, lineas });
+        const id_escena = await crearEscenaCompleta(conexionPool, { nombre_escena, rut_usuario, lineas, relaciones, preguntas });
         res.status(201).json({ mensaje: 'Escena importada exitosamente', id_escena });
     } catch (error) {
         if (error.status === 400) return res.status(400).json({ error: error.message });

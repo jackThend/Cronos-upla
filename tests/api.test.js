@@ -4,7 +4,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 
 const RAIZ = path.join(__dirname, '..');
-const PUERTO = 3999;
+const PUERTO = 3997;
 const BASE = `http://localhost:${PUERTO}`;
 const USUARIO_A = { rut: '11111111-1', email: 'a@test.cl', clave: 'clave-segura-123' };
 const USUARIO_B = { rut: '22222222-2', email: 'b@test.cl', clave: 'clave-segura-456' };
@@ -447,6 +447,44 @@ describe('propuesta de IA aceptada', () => {
         assert.equal(despues.datos.preguntas.length, 1);
         const nombres = despues.datos.lineas.flatMap(l => l.eventos).map(e => e.titulo_evento);
         assert.ok(nombres.includes('Tratado de Versalles'));
+    });
+});
+
+describe('importacion completa (fuentes, relaciones y preguntas)', () => {
+    const lineasConFuentes = (tipoFuente = 'primaria') => [
+        { nombre_linea: 'Europa', nombre_zona: 'Europa', eventos: [
+            { titulo_evento: 'Hito A', anio_inicio: 1914, nombre_categoria: 'Guerra', descripcion: 'x', fuentes: [{ titulo: 'Fuente A', autor: 'Autor', anio: 1990, url: 'https://example.org/a', tipo: tipoFuente }] },
+            { titulo_evento: 'Hito B', anio_inicio: 1919, nombre_categoria: 'Política', descripcion: 'x' }
+        ] }
+    ];
+
+    test('reimporta fuentes, relaciones y preguntas', async () => {
+        const { status, datos } = await pedir('POST', '/api/escenas/importar', {
+            token: tokenA,
+            cuerpo: {
+                nombre_escena: 'Ida y vuelta',
+                lineas: lineasConFuentes(),
+                relaciones: [{ titulo_origen: 'Hito A', titulo_destino: 'Hito B', tipo: 'causa', nota: 'Primero una cosa y luego otra' }],
+                preguntas: ['¿Qué cambió entre ambos hitos?']
+            }
+        });
+        assert.equal(status, 201);
+
+        const detalle = await pedir('GET', `/api/escenas/${datos.id_escena}/detalle`);
+        const hitoA = detalle.datos.lineas.flatMap(l => l.eventos).find(e => e.titulo_evento === 'Hito A');
+        assert.equal(hitoA.fuentes.length, 1);
+        assert.equal(hitoA.fuentes[0].autor, 'Autor');
+        assert.equal(detalle.datos.preguntas.length, 1);
+        assert.ok(detalle.datos.relaciones.some(r => r.id_evento_origen === hitoA.id_evento && r.tipo === 'causa'));
+    });
+
+    test('rechaza fuentes con tipo inválido al importar', async () => {
+        const { status, datos } = await pedir('POST', '/api/escenas/importar', {
+            token: tokenA,
+            cuerpo: { nombre_escena: 'Mala fuente', lineas: lineasConFuentes('rumor') }
+        });
+        assert.equal(status, 400);
+        assert.match(datos.error, /fuente/);
     });
 });
 

@@ -109,7 +109,7 @@ function _marcasLineales(desde, hasta) {
 function _marcasLogaritmicas(desde, hasta) {
     const marcas = new Set([0]);
     for (let potencia = 0; potencia <= 4; potencia++) {
-        [1, 2, 5].forEach(multiplo => {
+        [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9].forEach(multiplo => {
             marcas.add(multiplo * 10 ** potencia);
             marcas.add(-multiplo * 10 ** potencia);
         });
@@ -315,7 +315,7 @@ function _todosLosEventosVisibles() {
 }
 
 function citarAPA(fuente) {
-    const autor = fuente.autor ? `${escaparHTML(fuente.autor)}. ` : '';
+    const autor = fuente.autor ? `${escaparHTML(String(fuente.autor).replace(/\.$/, ''))}. ` : '';
     const url = fuente.url ? ` ${escaparHTML(fuente.url)}` : '';
     return `${autor}(${fuente.anio || 's.f.'}). <em>${escaparHTML(fuente.titulo)}</em>.${url}`;
 }
