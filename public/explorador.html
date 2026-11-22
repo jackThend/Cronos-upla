@@ -24,6 +24,12 @@
         <div class="gallery-container" style="flex: 1;">
             <h1 class="gallery-title">Explora la Historia</h1>
             
+            <!-- Escenas asignadas por el docente (solo visible si existen) -->
+            <div id="seccionAsignadas" class="hidden" style="max-width: 1100px; margin: 0 auto 2.5rem auto;">
+                <h2 style="color: #fff; margin-bottom: 1rem;">Asignadas a ti</h2>
+                <div class="scenes-grid" id="gridAsignadas"></div>
+            </div>
+
             <!-- Buscador de Escenas -->
             <div class="search-container" style="max-width: 600px; margin: 0 auto 2rem auto;">
                 <input type="text" id="buscadorEscenas" class="form-control glass-panel" placeholder="🔍 Buscar escena por nombre..." style="font-size: 1.1rem; padding: 1rem 1.5rem; border-radius: 30px;">

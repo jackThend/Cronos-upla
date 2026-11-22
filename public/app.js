@@ -4,6 +4,30 @@ const API_URL = '/api';
 // Inicio escape HTML para datos de usuario y de la base de datos
 const escaparHTML = (texto) => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Inicio formato de fechas segun su precision
+function romano(n) {
+    const simbolos = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+    let resultado = '';
+    for (const [valor, simbolo] of simbolos) {
+        while (n >= valor) {
+            resultado += simbolo;
+            n -= valor;
+        }
+    }
+    return resultado;
+}
+
+function formatearFecha(anio, precision = 'exacta') {
+    const texto = anio === 0 ? 'A.D. 0' : (anio < 0 ? `${Math.abs(anio)} a.C.` : String(anio));
+    if (precision === 'aproximada') return `c. ${texto}`;
+    if (precision === 'siglo') return `s. ${romano(Math.ceil(Math.abs(anio) / 100) || 1)}${anio < 0 ? ' a.C.' : ''}`;
+    if (precision === 'decada') {
+        const decada = Math.floor(anio / 10) * 10;
+        return decada < 0 ? `${Math.abs(decada)}s a.C.` : `${decada}s`;
+    }
+    return texto;
+}
+
 // Inicio token de sesion en peticiones a la API
 const fetchSinToken = window.fetch.bind(window);
 window.fetch = (url, opciones = {}) => {
@@ -397,7 +421,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             anio_inicio: document.getElementById('anioInicio').value,
             anio_fin: document.getElementById('anioFin').value || null,
             descripcion: document.getElementById('descEvento').value,
-            imagen_url: document.getElementById('imagenUrl').value || null
+            imagen_url: document.getElementById('imagenUrl').value || null,
+            precision_fecha: document.getElementById('precisionFecha').value,
+            interpretacion: document.getElementById('interpretacionEvento').value || null
         };
 
         const metodo = idModificar ? 'PUT' : 'POST';
@@ -449,7 +475,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${escaparHTML(ev.titulo_evento)}</td>
-                    <td>${Number(ev.anio_inicio)}</td>
+                    <td>${escaparHTML(formatearFecha(ev.anio_inicio, ev.precision_fecha))}</td>
                     <td>${ev.anio_fin ? Number(ev.anio_fin) : '-'}</td>
                     <td>${escaparHTML(ev.nombre_categoria || 'General')}</td>
                     <td>
@@ -474,6 +500,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('categoriaEvento').value = evento.id_categoria || '';
         document.getElementById('descEvento').value = evento.descripcion || '';
         document.getElementById('imagenUrl').value = evento.imagen_url || '';
+        document.getElementById('precisionFecha').value = evento.precision_fecha || 'exacta';
+        document.getElementById('interpretacionEvento').value = evento.interpretacion || '';
         
         document.getElementById('btnGuardarEvento').textContent = 'Actualizar Evento';
         document.getElementById('btnCancelarEdicion').classList.remove('hidden');
@@ -632,6 +660,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('tituloEdicionEscena').textContent = `Editando Escena: ${nombre}`;
         document.getElementById('idEscenaRenombrar').value = id_escena;
         document.getElementById('inputRenombrarEscena').value = nombre;
+        cargarPanelAvanzado(id_escena);
     };
 
     document.getElementById('btnVolverGestor')?.addEventListener('click', () => {
@@ -666,6 +695,133 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.mostrarNotificacion(err.message, true);
         }
     });
+
+    // ========================================================
+    // Inicio panel avanzado de escena (relaciones, fuentes, preguntas, asignaciones)
+    // ========================================================
+    let eventosEscenaActual = [];
+
+    function idEscenaEditada() {
+        return document.getElementById('idEscenaRenombrar').value;
+    }
+
+    async function cargarPanelAvanzado(idEscena) {
+        try {
+            const respuesta = await fetch(`${API_URL}/escenas/${idEscena}/detalle`);
+            const escena = await manejarRespuesta(respuesta);
+            eventosEscenaActual = escena.lineas.flatMap(linea => (linea.eventos || []).map(evento => ({ ...evento, nombre_linea: linea.nombre_linea })));
+
+            const opciones = eventosEscenaActual.map(e => `<option value="${Number(e.id_evento)}">${escaparHTML(e.nombre_linea)}: ${escaparHTML(e.titulo_evento)} (${escaparHTML(formatearFecha(e.anio_inicio, e.precision_fecha))})</option>`).join('');
+            document.getElementById('relOrigen').innerHTML = opciones;
+            document.getElementById('relDestino').innerHTML = opciones;
+            document.getElementById('fuenteEvento').innerHTML = opciones;
+
+            renderizarRelaciones(escena.relaciones || []);
+            renderizarFuentes();
+            renderizarPreguntas(escena.preguntas || []);
+            await cargarAsignaciones(idEscena);
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    }
+
+    function tituloDeEvento(id) {
+        return eventosEscenaActual.find(e => e.id_evento === id)?.titulo_evento || 'evento';
+    }
+
+    function renderizarRelaciones(relaciones) {
+        document.getElementById('listaRelaciones').innerHTML = relaciones.length
+            ? relaciones.map(r => `<li>${escaparHTML(tituloDeEvento(r.id_evento_origen))} → <em>${escaparHTML(r.tipo)}</em> → ${escaparHTML(tituloDeEvento(r.id_evento_destino))} <button type="button" class="btn" style="width: auto; padding: 2px 8px; background: #e74c3c;" onclick="window.borrarRelacionC(${Number(r.id_relacion)})">Quitar</button></li>`).join('')
+            : '<li>Sin relaciones aún.</li>';
+    }
+
+    function renderizarFuentes() {
+        const idEvento = Number(document.getElementById('fuenteEvento').value);
+        const fuentes = eventosEscenaActual.find(e => e.id_evento === idEvento)?.fuentes || [];
+        document.getElementById('listaFuentes').innerHTML = fuentes.length
+            ? fuentes.map(f => `<li>${escaparHTML(f.titulo)} <small>(${escaparHTML(f.tipo)})</small> <button type="button" class="btn" style="width: auto; padding: 2px 8px; background: #e74c3c;" onclick="window.borrarFuenteC(${Number(f.id_fuente)})">Quitar</button></li>`).join('')
+            : '<li>Este evento no tiene fuentes.</li>';
+    }
+
+    function renderizarPreguntas(preguntas) {
+        document.getElementById('listaPreguntasEdicion').innerHTML = preguntas.length
+            ? preguntas.map(p => `<li>${escaparHTML(p.texto)} <button type="button" class="btn" style="width: auto; padding: 2px 8px; background: #e74c3c;" onclick="window.borrarPreguntaC(${Number(p.id_pregunta)})">Quitar</button></li>`).join('')
+            : '<li>Sin preguntas aún.</li>';
+    }
+
+    async function cargarAsignaciones(idEscena) {
+        const lista = document.getElementById('listaAsignaciones');
+        const respuesta = await fetch(`${API_URL}/escenas/${idEscena}/asignaciones`);
+        const datos = await manejarRespuesta(respuesta);
+        lista.innerHTML = datos.resultados.length
+            ? datos.resultados.map(a => `<li>${escaparHTML(a.nombre_completo)} (${escaparHTML(a.rut_estudiante)}) <button type="button" class="btn" style="width: auto; padding: 2px 8px; background: #e74c3c;" onclick="window.quitarAsignacionC('${escaparHTML(a.rut_estudiante)}')">Quitar</button></li>`).join('')
+            : '<li>Sin estudiantes asignados.</li>';
+    }
+
+    async function peticionAvanzada(metodo, ruta, cuerpo, mensajeOk) {
+        try {
+            const respuesta = await fetch(`${API_URL}${ruta}`, {
+                method: metodo,
+                headers: cuerpo ? { 'Content-Type': 'application/json' } : {},
+                body: cuerpo ? JSON.stringify(cuerpo) : undefined
+            });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(mensajeOk || datos.mensaje);
+            await cargarPanelAvanzado(idEscenaEditada());
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    }
+
+    document.getElementById('fuenteEvento')?.addEventListener('change', renderizarFuentes);
+
+    document.getElementById('btnAgregarRelacion')?.addEventListener('click', () => {
+        const origen = document.getElementById('relOrigen').value;
+        const destino = document.getElementById('relDestino').value;
+        if (!origen || !destino) return showToast('Selecciona el evento origen y el destino', true);
+        peticionAvanzada('POST', '/relaciones', {
+            id_evento_origen: Number(origen),
+            id_evento_destino: Number(destino),
+            tipo: document.getElementById('relTipo').value,
+            nota: document.getElementById('relNota').value.trim() || null
+        }, 'Relación añadida');
+    });
+
+    document.getElementById('btnAgregarFuente')?.addEventListener('click', () => {
+        const idEvento = document.getElementById('fuenteEvento').value;
+        const titulo = document.getElementById('fuenteTitulo').value.trim();
+        if (!idEvento || !titulo) return showToast('Selecciona un evento e indica el título de la fuente', true);
+        peticionAvanzada('POST', `/eventos/${Number(idEvento)}/fuentes`, {
+            titulo,
+            autor: document.getElementById('fuenteAutor').value.trim() || null,
+            anio: document.getElementById('fuenteAnio').value || null,
+            url: document.getElementById('fuenteUrl').value.trim() || null,
+            tipo: document.getElementById('fuenteTipo').value
+        }, 'Fuente añadida');
+        document.getElementById('fuenteTitulo').value = '';
+        document.getElementById('fuenteAutor').value = '';
+        document.getElementById('fuenteAnio').value = '';
+        document.getElementById('fuenteUrl').value = '';
+    });
+
+    document.getElementById('btnAgregarPregunta')?.addEventListener('click', () => {
+        const texto = document.getElementById('nuevaPregunta').value.trim();
+        if (!texto) return showToast('Escribe la pregunta', true);
+        peticionAvanzada('POST', `/escenas/${idEscenaEditada()}/preguntas`, { texto }, 'Pregunta añadida');
+        document.getElementById('nuevaPregunta').value = '';
+    });
+
+    document.getElementById('btnAsignarEstudiante')?.addEventListener('click', () => {
+        const rut = document.getElementById('rutEstudianteAsignar').value.trim();
+        if (!rut) return showToast('Escribe el RUT del estudiante', true);
+        peticionAvanzada('POST', `/escenas/${idEscenaEditada()}/asignaciones`, { rut_estudiante: rut }, 'Escena asignada');
+        document.getElementById('rutEstudianteAsignar').value = '';
+    });
+
+    window.borrarRelacionC = (id) => peticionAvanzada('DELETE', `/relaciones/${id}`, null, 'Relación quitada');
+    window.borrarFuenteC = (id) => peticionAvanzada('DELETE', `/fuentes/${id}`, null, 'Fuente quitada');
+    window.borrarPreguntaC = (id) => peticionAvanzada('DELETE', `/preguntas/${id}`, null, 'Pregunta quitada');
+    window.quitarAsignacionC = (rut) => peticionAvanzada('DELETE', `/escenas/${idEscenaEditada()}/asignaciones/${encodeURIComponent(rut)}`, null, 'Asignación quitada');
 
     // ========================================================
     // Inicio asistente IA
@@ -781,6 +937,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <tbody>${filas.join('')}</tbody>
                 </table>
             </div>
+            ${datos.advertencias.length ? `<h4 style="color: #f39c12; margin-top: 15px;">Advertencias</h4><ul>${datos.advertencias.map(a => `<li>${escaparHTML(a)}</li>`).join('')}</ul>` : ''}
+            ${datos.relaciones.length ? `<h4 style="color: #fff; margin-top: 15px;">Relaciones propuestas</h4><ul>${datos.relaciones.map(r => `<li>${escaparHTML(r.titulo_origen)} → <em>${escaparHTML(r.tipo)}</em> → ${escaparHTML(r.titulo_destino)}${r.nota ? ` <small>(${escaparHTML(r.nota)})</small>` : ''}</li>`).join('')}</ul>` : ''}
+            ${datos.preguntas.length ? `<h4 style="color: #fff; margin-top: 15px;">Preguntas de comparación</h4><ol>${datos.preguntas.map(p => `<li>${escaparHTML(p)}</li>`).join('')}</ol>` : ''}
+            ${datos.relaciones_descartadas ? `<p style="color: #ccc; font-size: 0.85rem;">${datos.relaciones_descartadas} relación(es) descartadas por usar títulos que no existen.</p>` : ''}
             <button type="button" id="btnAceptarPropuesta" class="btn" style="margin-top: 15px;">Añadir Propuesta a la Escena</button>
         `;
         document.getElementById('btnAceptarPropuesta').addEventListener('click', aceptarPropuestaIA);
@@ -804,7 +964,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 body: JSON.stringify({ rut_usuario: rutUsuario, id_escena: idEscena, instruccion })
             });
             const datos = await manejarRespuesta(respuesta);
-            propuestaIA = { id_escena: idEscena, lineas: datos.lineas };
+            propuestaIA = { id_escena: idEscena, lineas: datos.lineas, relaciones: datos.relaciones, preguntas: datos.preguntas };
             renderizarPropuestaIA(datos);
         } catch (error) {
             contenedor.innerHTML = `<p style="color: #ff6b6b;">Error: ${escaparHTML(error.message)}</p>`;
@@ -818,7 +978,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const respuesta = await fetch(`${API_URL}/escenas/${propuestaIA.id_escena}/lineas-importar`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rut_usuario: rutUsuario, lineas: propuestaIA.lineas })
+                body: JSON.stringify({ rut_usuario: rutUsuario, lineas: propuestaIA.lineas, relaciones: propuestaIA.relaciones, preguntas: propuestaIA.preguntas })
             });
             const datos = await manejarRespuesta(respuesta);
             showToast(datos.mensaje);
@@ -958,7 +1118,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     nombre_categoria: valor('categoria'),
                     descripcion: valor('descripcion'),
                     imagen_url: valor('imagen_url'),
-                    fuente_url: valor('fuente_url')
+                    fuente_url: valor('fuente_url'),
+                    precision_fecha: valor('precision'),
+                    interpretacion: valor('interpretacion')
                 });
             }
         });
@@ -1021,7 +1183,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     nombre_categoria: evento.nombre_categoria,
                     descripcion: evento.descripcion,
                     imagen_url: evento.imagen_url,
-                    fuente_url: evento.fuente_url
+                    fuente_url: evento.fuente_url,
+                    precision_fecha: evento.precision_fecha,
+                    interpretacion: evento.interpretacion
                 }))
             }))
         };
@@ -1063,14 +1227,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         try {
             const escena = await obtenerEscenaParaExportar(idEscena);
-            const filas = ['linea;zona;color;titulo;anio_inicio;anio_fin;categoria;descripcion;imagen_url;fuente_url'];
+            const filas = ['linea;zona;color;titulo;anio_inicio;anio_fin;categoria;descripcion;imagen_url;fuente_url;precision;interpretacion'];
             escena.lineas.forEach(linea => {
                 const base = [linea.nombre_linea, linea.nombre_zona, linea.color_personalizado];
                 if (linea.eventos.length === 0) {
-                    filas.push([...base, '', '', '', '', '', '', ''].map(celdaCSV).join(';'));
+                    filas.push([...base, '', '', '', '', '', '', '', '', ''].map(celdaCSV).join(';'));
                 }
                 linea.eventos.forEach(evento => {
-                    filas.push([...base, evento.titulo_evento, evento.anio_inicio, evento.anio_fin, evento.nombre_categoria, evento.descripcion, evento.imagen_url, evento.fuente_url].map(celdaCSV).join(';'));
+                    filas.push([...base, evento.titulo_evento, evento.anio_inicio, evento.anio_fin, evento.nombre_categoria, evento.descripcion, evento.imagen_url, evento.fuente_url, evento.precision_fecha, evento.interpretacion].map(celdaCSV).join(';'));
                 });
             });
             descargarArchivo('\uFEFF' + filas.join('\r\n'), `${nombreArchivoSeguro(escena.nombre_escena)}.csv`, 'text/csv;charset=utf-8');
@@ -1133,6 +1297,7 @@ window.cargarExplorador = async function() {
 
     // Carga inicial
     await cargarDatos();
+    cargarAsignadasAlumno();
     
     if (buscador) {
         let timeoutBusqueda;
@@ -1145,6 +1310,33 @@ window.cargarExplorador = async function() {
         });
     }
 };
+
+async function cargarAsignadasAlumno() {
+    const seccion = document.getElementById('seccionAsignadas');
+    const grilla = document.getElementById('gridAsignadas');
+    if (!seccion || !grilla) return;
+
+    try {
+        const respuesta = await fetch(`${API_URL}/asignaciones/mias`);
+        const datos = await manejarRespuesta(respuesta);
+        if (datos.resultados.length === 0) return;
+
+        grilla.innerHTML = '';
+        datos.resultados.forEach(escena => {
+            const tarjeta = document.createElement('div');
+            tarjeta.className = 'scene-card glass-panel';
+            tarjeta.onclick = () => window.location.href = `lienzo.html?id=${Number(escena.id_escena)}`;
+            tarjeta.innerHTML = `
+                <h3>${escaparHTML(escena.nombre_escena)}</h3>
+                <p style="margin-top: 15px; font-weight: 600; color: #4a90e2; font-size: 0.95rem;">Abrir y responder ➔</p>
+            `;
+            grilla.appendChild(tarjeta);
+        });
+        seccion.classList.remove('hidden');
+    } catch (error) {
+        console.error('Error al cargar escenas asignadas:', error.message);
+    }
+}
 
 function renderizarEscenas(escenas) {
     const grilla = document.getElementById('scenesGrid');
@@ -1169,489 +1361,3 @@ function renderizarEscenas(escenas) {
         grilla.appendChild(tarjeta);
     });
 }
-
-// ==========================================
-// Inicio motor crono espacial
-// ==========================================
-
-// Variables estado motor
-let _datosEscena = null;         
-let _anioMin = 0;               
-let _anioMax = 0;               
-let _escala = 4;                
-const _ESCALA_MIN = 0.5;        
-const _ESCALA_MAX = 150;         
-const _SUBLANE_H = 55;          
-const _CINTA_H = 34;            
-const _CINTA_OFFSET_TOP = 10;   
-
-// Calculo intervalo ideal
-function _calcularIntervalo() {
-    const pxPorAnio = _escala;
-    // Inicio asignacion proporcion
-    const aniosPorMarca = 80 / pxPorAnio; 
-    const escalones = [1, 2, 5, 10, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
-    for (let i = 0; i < escalones.length; i++) {
-        if (escalones[i] >= aniosPorMarca) return escalones[i];
-    }
-    return 5000;
-}
-
-// Formatear anio
-function _formatearAnio(anio) {
-    if (anio === 0) return 'A.D. 0';
-    return anio < 0 ? `${Math.abs(anio)} a.C.` : String(anio);
-}
-
-// Inicio renderizado principal
-function _renderizarLineasDeTiempo() {
-    const contenedorGlobal = document.getElementById('timelineGlobalContainer');
-    if (!contenedorGlobal || !_datosEscena) return;
-
-    contenedorGlobal.innerHTML = '';
-
-    // Inicio margen linea
-    const margenAnio = 500;
-    const minimoAnio = _anioMin - margenAnio;
-    const maximoAnio = _anioMax + margenAnio;
-
-    // Calculo ancho linea
-    const anchoCalculado = (maximoAnio - minimoAnio) * _escala;
-    const anchoGlobal = Math.max(anchoCalculado, window.innerWidth * 3);
-    contenedorGlobal.style.width = `${anchoGlobal}px`;
-
-    // Inicio conversion px
-    const anioPixeles = (anio) => (anio - minimoAnio) * _escala;
-
-    // Renderizado regla
-    const reglaTemporal = document.createElement('div');
-    reglaTemporal.className = 'time-ruler';
-    reglaTemporal.style.width = `${anchoGlobal}px`;
-
-    const interv = _calcularIntervalo();
-    const primeraMarca = Math.ceil(minimoAnio / interv) * interv;
-
-    // Inicio calculo submarcas
-    let subInterv = interv;
-    const posiblesSubInterv = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000];
-    for (let i = posiblesSubInterv.length - 1; i >= 0; i--) {
-        const val = posiblesSubInterv[i];
-        if (val < interv && (interv % val === 0)) {
-            // Inicio validacion espacio visual
-            if ((val * _escala) >= 15) { 
-                subInterv = val;
-            }
-        }
-    }
-
-    for (let anio = primeraMarca; anio <= maximoAnio; anio += interv) {
-        // Inicio renderizado marca principal
-        const marcaTiempo = document.createElement('div');
-        marcaTiempo.className = 'time-marker';
-        marcaTiempo.textContent = _formatearAnio(anio);
-        marcaTiempo.style.left = `${anioPixeles(anio)}px`;
-        reglaTemporal.appendChild(marcaTiempo);
-
-        // Inicio renderizado submarcas
-        if (subInterv < interv) {
-            for (let subAnio = anio + subInterv; subAnio < anio + interv && subAnio <= maximoAnio; subAnio += subInterv) {
-                const subMarca = document.createElement('div');
-                subMarca.className = 'time-marker minor-tick';
-                subMarca.style.left = `${anioPixeles(subAnio)}px`;
-                reglaTemporal.appendChild(subMarca);
-            }
-        }
-    }
-    contenedorGlobal.appendChild(reglaTemporal);
-
-    // Renderizado linea inicial
-    const lineaInicial = document.createElement('div');
-    lineaInicial.style.cssText = `
-        position: absolute; top: 60px; bottom: 0;
-        left: ${anioPixeles(0)}px;
-        width: 1px;
-        background: rgba(255,255,255,0.08);
-        pointer-events: none;
-    `;
-    contenedorGlobal.appendChild(lineaInicial);
-
-    // Renderizado carriles
-    _datosEscena.lineas.forEach(linea => {
-        const carril = document.createElement('div');
-        carril.className = 'lane';
-
-        // Renderizado cabecera
-        const cabecera = document.createElement('div');
-        cabecera.className = 'lane-header';
-        cabecera.innerHTML = `
-            <h3 class="lane-title" style="border-left-color: ${escaparHTML(linea.color_personalizado)}; color: white;">
-                ${escaparHTML(linea.nombre_linea)}
-                <span style="font-size:0.75rem; font-weight:400; opacity:0.6;">(${escaparHTML(linea.nombre_zona)})</span>
-            </h3>
-        `;
-        carril.appendChild(cabecera);
-
-        const pistaCarril = document.createElement('div');
-        pistaCarril.className = 'lane-track';
-        // Seteo ancho
-        pistaCarril.style.width = `${anchoGlobal}px`;
-
-        if (linea.eventos && linea.eventos.length > 0) {
-            // Inicio ordenamiento
-            linea.eventos.sort((a, b) => a.anio_inicio - b.anio_inicio);
-
-            // Inicio calculo pistas
-            const finSubcarrilesX = [-Infinity, -Infinity, -Infinity, -Infinity, -Infinity];
-            let maxSubcarril = 0;
-
-            linea.eventos.forEach(evento => {
-                const anioFinal = evento.anio_fin ? evento.anio_fin : evento.anio_inicio;
-                const inicioX = anioPixeles(evento.anio_inicio);
-                const duracionPixeles = (anioFinal - evento.anio_inicio) * _escala;
-                const cintaAncho = Math.max(duracionPixeles, _CINTA_H); 
-                const finX = inicioX + cintaAncho + 16; 
-
-                // Busqueda pista libre
-                let subcarril = 0;
-                for (let i = 0; i < finSubcarrilesX.length; i++) {
-                    if (finSubcarrilesX[i] <= inicioX) {
-                        subcarril = i;
-                        finSubcarrilesX[i] = finX;
-                        if (i > maxSubcarril) maxSubcarril = i;
-                        break;
-                    }
-                }
-
-                const grupo = document.createElement('div');
-                grupo.className = 'event-group';
-                grupo.style.left = `${inicioX}px`;
-                grupo.style.top = `${_CINTA_OFFSET_TOP + (subcarril * _SUBLANE_H)}px`;
-                grupo.style.width = `${cintaAncho}px`;
-                grupo.style.height = `${_CINTA_H}px`;
-
-                // Inicio renderizado linea guia
-                grupo.onmouseenter = () => {
-                    let guiaGlobal = document.getElementById('globalGuideLine');
-                    if (!guiaGlobal) {
-                        guiaGlobal = document.createElement('div');
-                        guiaGlobal.id = 'globalGuideLine';
-                        guiaGlobal.style.position = 'absolute';
-                        guiaGlobal.style.width = '1px';
-                        guiaGlobal.style.borderLeft = '1px dashed rgba(255, 255, 255, 0.6)';
-                        guiaGlobal.style.pointerEvents = 'none';
-                        // Inicio aplicacion indice z
-                        guiaGlobal.style.zIndex = '1'; 
-                        document.getElementById('timelineGlobalContainer').appendChild(guiaGlobal);
-                    }
-                    
-                    // Inicio calculo coordenadas
-                    const rectGrupo = grupo.getBoundingClientRect();
-                    const contenedorGlobal = document.getElementById('timelineGlobalContainer');
-                    const rectGlobal = contenedorGlobal.getBoundingClientRect();
-                    const ruler = document.querySelector('.time-ruler');
-                    const rectRuler = ruler ? ruler.getBoundingClientRect() : rectGlobal;
-                    
-                    const xLocal = rectGrupo.left - rectGlobal.left;
-                    const yLocal = rectRuler.bottom - rectGlobal.top;
-                    const altoLinea = rectGrupo.top - rectRuler.bottom;
-                    
-                    guiaGlobal.style.left = `${xLocal}px`;
-                    guiaGlobal.style.top = `${yLocal}px`;
-                    guiaGlobal.style.height = `${altoLinea}px`;
-                    guiaGlobal.style.display = 'block';
-                };
-                grupo.onmouseleave = () => {
-                    const guiaGlobal = document.getElementById('globalGuideLine');
-                    if (guiaGlobal) guiaGlobal.style.display = 'none';
-                };
-
-                // Cinta
-                const cinta = document.createElement('div');
-                cinta.className = 'event-ribbon';
-                cinta.style.width = `${cintaAncho}px`;
-                cinta.style.backgroundColor = linea.color_personalizado;
-                cinta.title = `${evento.titulo_evento} (${_formatearAnio(evento.anio_inicio)}${evento.anio_fin ? ' – ' + _formatearAnio(evento.anio_fin) : ''})`;
-
-                // Etiqueta flotante interior
-                const etiqueta = document.createElement('div');
-                etiqueta.className = 'ribbon-label';
-                etiqueta.textContent = `${evento.titulo_evento} (${_formatearAnio(evento.anio_inicio)})`;
-
-                // Inicio click evento
-                grupo.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    _abrirModal(evento, linea.color_personalizado);
-                });
-
-                grupo.appendChild(cinta);
-                grupo.appendChild(etiqueta);
-                pistaCarril.appendChild(grupo);
-            });
-
-            // Seteo altura carril
-            const carrilAltura = (maxSubcarril + 1) * _SUBLANE_H + _CINTA_OFFSET_TOP * 2;
-            pistaCarril.style.minHeight = `${carrilAltura}px`;
-
-        } else {
-            pistaCarril.innerHTML = `<p style="color: rgba(255,255,255,0.25); padding: 1.5rem 2rem; font-style: italic;">Sin eventos en esta línea.</p>`;
-            pistaCarril.style.minHeight = '80px';
-        }
-
-        carril.appendChild(pistaCarril);
-        contenedorGlobal.appendChild(carril);
-    });
-
-    // Actualizacion indicador
-    const etiquetaEscala = document.getElementById('zoomLabel');
-    if (etiquetaEscala) etiquetaEscala.textContent = `${_escala} px/año`;
-}
-
-// Inicio modal
-function _abrirModal(evento, colorLinea) {
-    const capa = document.getElementById('eventModalOverlay');
-    const contenedorImg = document.getElementById('modalImageContainer');
-    const tituloModal = document.getElementById('modalTitle');
-    const aniosModal = document.getElementById('modalYears');
-    const categoriaModal = document.getElementById('modalCategory');
-    const descModal = document.getElementById('modalDesc');
-
-    if (!capa) return;
-
-    // Inicio renderizado de imagen modal
-    if (evento.imagen_url && evento.imagen_url.trim() !== '') {
-        contenedorImg.innerHTML = `<img src="${escaparHTML(evento.imagen_url.trim())}" alt="${escaparHTML(evento.titulo_evento)}" style="width: 100%; height: 220px; object-fit: cover; border-radius: 20px 20px 0 0; display: block;">`;
-        contenedorImg.style.display = 'block';
-    } else {
-        contenedorImg.innerHTML = '';
-        contenedorImg.style.display = 'none';
-    }
-
-    // Color del borde superior del modal según línea
-    capa.querySelector('.modal-content').style.borderTop = `4px solid ${colorLinea}`;
-
-    tituloModal.textContent = evento.titulo_evento;
-    aniosModal.textContent = `${evento.anio_inicio < 0 ? Math.abs(evento.anio_inicio) + ' a.C.' : evento.anio_inicio}` +
-        (evento.anio_fin ? ` – ${evento.anio_fin < 0 ? Math.abs(evento.anio_fin) + ' a.C.' : evento.anio_fin}` : '');
-    categoriaModal.textContent = evento.nombre_categoria || 'General';
-    categoriaModal.style.background = colorLinea;
-    descModal.textContent = evento.descripcion || 'Sin descripción detallada.';
-
-    const fuenteModal = document.getElementById('modalFuente');
-    if (fuenteModal) {
-        fuenteModal.innerHTML = evento.fuente_url
-            ? `<a href="${escaparHTML(evento.fuente_url)}" target="_blank" rel="noopener" style="color: #4a90e2;">Ver fuente</a>`
-            : '';
-    }
-
-    capa.classList.remove('hidden');
-}
-
-// Inicio carga escena api
-window.cargarLienzo = async function(idEscena) {
-    const objetoTitulo = document.getElementById('lienzoEscenaTitulo');
-    const contenedorGlobal = document.getElementById('timelineGlobalContainer');
-    if (!contenedorGlobal || !objetoTitulo) return;
-
-    try {
-        const respuesta = await fetch(`${API_URL}/escenas/${idEscena}/detalle`);
-        const datos = await manejarRespuesta(respuesta);
-
-        objetoTitulo.textContent = datos.nombre_escena;
-
-        if (!datos.lineas || datos.lineas.length === 0) {
-            contenedorGlobal.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:100%;"><h2 style="color: rgba(255,255,255,0.5);">Esta escena está vacía.</h2></div>';
-            return;
-        }
-
-        // Extraer todos los eventos para calcular rango global
-        let todosEventos = [];
-        datos.lineas.forEach(l => { if (l.eventos) todosEventos = todosEventos.concat(l.eventos); });
-
-        if (todosEventos.length === 0) {
-            contenedorGlobal.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:100%;"><h2 style="color: rgba(255,255,255,0.5);">No hay eventos creados en esta escena aún.</h2></div>';
-            return;
-        }
-
-        _anioMin = Math.min(...todosEventos.map(e => e.anio_inicio));
-        _anioMax = Math.max(...todosEventos.map(e => e.anio_fin ? e.anio_fin : e.anio_inicio));
-        _datosEscena = datos;
-
-        // Ajustar escala inicial para que todo quepa razonablemente en pantalla
-        const diferenciaAnios = _anioMax - _anioMin + 60;
-        const anchoPantalla = window.innerWidth * 0.85;
-        _escala = Math.max(_ESCALA_MIN, Math.min(_ESCALA_MAX, anchoPantalla / diferenciaAnios));
-        _escala = Math.round(_escala * 10) / 10;
-
-        // Renderizado inicial
-        _renderizarLineasDeTiempo();
-
-        // Inicio evento drag scroll
-        const areaDeslizamiento = document.getElementById('canvasScrollArea');
-        if (areaDeslizamiento && !areaDeslizamiento._dragListenerActivo) {
-            areaDeslizamiento._dragListenerActivo = true;
-            let estaArrastrando = false, inicioXScroll = 0, scrollIzquierda = 0;
-
-            areaDeslizamiento.addEventListener('mousedown', (e) => {
-                // Ignorar clic cinta
-                if (e.target.classList.contains('event-ribbon') || e.target.classList.contains('event-group')) return;
-                estaArrastrando = true;
-                areaDeslizamiento.style.cursor = 'grabbing';
-                inicioXScroll = e.pageX - areaDeslizamiento.offsetLeft;
-                scrollIzquierda = areaDeslizamiento.scrollLeft;
-            });
-            document.addEventListener('mouseup', () => {
-                estaArrastrando = false;
-                areaDeslizamiento.style.cursor = 'grab';
-            });
-            areaDeslizamiento.addEventListener('mousemove', (e) => {
-                if (!estaArrastrando) return;
-                e.preventDefault();
-                const x = e.pageX - areaDeslizamiento.offsetLeft;
-                areaDeslizamiento.scrollLeft = scrollIzquierda - (x - inicioXScroll) * 1.5;
-            });
-        }
-
-        // Inicio etiquetas flotantes
-        // Calculo posicion etiquetas
-        function _posicionarEtiquetas() {
-            const desplazamientoIzquierda = areaDeslizamiento.scrollLeft;
-            const MARGEN_ETIQUETA = 14; 
-            document.querySelectorAll('.event-group').forEach(grupo => {
-                const etiqueta = grupo.querySelector('.ribbon-label');
-                if (!etiqueta) return;
-                const grupoInicioX = parseFloat(grupo.dataset.startX || 0);
-                const cintaAncho  = parseFloat(grupo.dataset.anchoCinta || 0);
-                const anchoTexto  = etiqueta.offsetWidth || 120; 
-                // Calculo limite desplazamiento
-                const desplazamientoMaximo = Math.max(0, cintaAncho - anchoTexto - MARGEN_ETIQUETA * 2);
-                // Calculo desplazamiento efectivo
-                const desplazamientoEfectivo = Math.min(desplazamientoMaximo, Math.max(0, desplazamientoIzquierda - grupoInicioX + MARGEN_ETIQUETA));
-                etiqueta.style.left = `${desplazamientoEfectivo + MARGEN_ETIQUETA}px`;
-            });
-        }
-
-        // Escucha evento scroll
-        if (areaDeslizamiento && !areaDeslizamiento._labelScrollActivo) {
-            areaDeslizamiento._labelScrollActivo = true;
-            areaDeslizamiento.addEventListener('scroll', _posicionarEtiquetas);
-        }
-
-        // Inicio controles escala
-        const botonAcercar  = document.getElementById('btnZoomIn');
-        const botonAlejar = document.getElementById('btnZoomOut');
-
-        if (botonAcercar && !botonAcercar._zoomActivo) {
-            botonAcercar._zoomActivo = true;
-            botonAcercar.addEventListener('click', () => {
-                // Calculo proporcion centro
-                const areaLienzo = document.getElementById('canvasScrollArea');
-                const proporcionCentro = (areaLienzo.scrollLeft + areaLienzo.clientWidth / 2) / parseFloat(document.getElementById('timelineGlobalContainer').style.width);
-                
-                _escala = Math.min(_ESCALA_MAX, parseFloat((_escala * 1.5).toFixed(2)));
-                _renderizarLineasDeTiempo();
-
-                // Reposicionamiento centrado
-                const anchoNuevo = parseFloat(document.getElementById('timelineGlobalContainer').style.width);
-                areaLienzo.scrollLeft = proporcionCentro * anchoNuevo - areaLienzo.clientWidth / 2;
-            });
-        }
-
-        if (botonAlejar && !botonAlejar._zoomActivo) {
-            botonAlejar._zoomActivo = true;
-            botonAlejar.addEventListener('click', () => {
-                const areaLienzo = document.getElementById('canvasScrollArea');
-                const proporcionCentro = (areaLienzo.scrollLeft + areaLienzo.clientWidth / 2) / parseFloat(document.getElementById('timelineGlobalContainer').style.width);
-
-                _escala = Math.max(_ESCALA_MIN, parseFloat((_escala / 1.5).toFixed(2)));
-                _renderizarLineasDeTiempo();
-
-                const anchoNuevo = parseFloat(document.getElementById('timelineGlobalContainer').style.width);
-                areaLienzo.scrollLeft = proporcionCentro * anchoNuevo - areaLienzo.clientWidth / 2;
-            });
-        }
-
-        // Inicio evento rueda raton
-        const areaLienzoScroll = document.getElementById('canvasScrollArea');
-        if (areaLienzoScroll && !areaLienzoScroll._wheelActivo) {
-            areaLienzoScroll._wheelActivo = true;
-            areaLienzoScroll.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                // Evento ir pasado
-                // Evento ir futuro
-                const velocidadScroll = 3; 
-                areaLienzoScroll.scrollLeft += e.deltaY * velocidadScroll;
-            }, { passive: false });
-        }
-
-        // Inicio cierre modal
-        const botonCerrar = document.getElementById('btnCloseModal');
-        const capa   = document.getElementById('eventModalOverlay');
-        if (botonCerrar && capa) {
-            botonCerrar.onclick = () => capa.classList.add('hidden');
-            capa.addEventListener('click', (e) => {
-                if (e.target === capa) capa.classList.add('hidden');
-            });
-        }
-
-    } catch (error) {
-        objetoTitulo.textContent = 'Error';
-        contenedorGlobal.innerHTML = `<div style="display:flex; justify-content:center; align-items:center; height:100%;"><h2 style="color: #ff6b6b;">Error al cargar: ${error.message}</h2></div>`;
-    }
-};
-
-// Inicio exportacion lienzo
-async function _capturarLienzo() {
-    if (typeof html2canvas === 'undefined') throw new Error('No se pudo cargar la librería de captura');
-    if (!_datosEscena) throw new Error('La escena aún no está cargada');
-
-    const contenedor = document.getElementById('timelineGlobalContainer');
-    const captura = await html2canvas(contenedor, { backgroundColor: '#0a0f1e', scale: 1, useCORS: true });
-
-    const alturaCabecera = 70;
-    const salida = document.createElement('canvas');
-    salida.width = captura.width;
-    salida.height = captura.height + alturaCabecera;
-
-    const contexto = salida.getContext('2d');
-    contexto.fillStyle = '#0a0f1e';
-    contexto.fillRect(0, 0, salida.width, salida.height);
-    contexto.fillStyle = '#ffffff';
-    contexto.font = 'bold 32px sans-serif';
-    contexto.fillText(_datosEscena.nombre_escena, 24, 46);
-    contexto.drawImage(captura, 0, alturaCabecera);
-
-    return salida;
-}
-
-window.exportarLienzoPNG = async function() {
-    try {
-        const imagen = await _capturarLienzo();
-        const enlace = document.createElement('a');
-        enlace.href = imagen.toDataURL('image/png');
-        enlace.download = `${_datosEscena.nombre_escena}.png`;
-        enlace.click();
-    } catch (error) {
-        window.mostrarNotificacion(`Error al exportar PNG: ${error.message}`, true);
-    }
-};
-
-window.exportarLienzoPDF = async function() {
-    const ventana = window.open('', '_blank');
-    if (!ventana) {
-        window.mostrarNotificacion('Permite las ventanas emergentes para exportar a PDF', true);
-        return;
-    }
-
-    try {
-        const imagen = await _capturarLienzo();
-        ventana.document.write(`<!DOCTYPE html><html><head><style>@page { size: landscape; margin: 8mm; } body { margin: 0; } img { width: 100%; height: auto; }</style></head><body><img src="${imagen.toDataURL('image/png')}"></body></html>`);
-        ventana.document.title = _datosEscena.nombre_escena;
-        ventana.document.close();
-        ventana.addEventListener('load', () => ventana.print());
-    } catch (error) {
-        ventana.close();
-        window.mostrarNotificacion(`Error al exportar PDF: ${error.message}`, true);
-    }
-};
-
-

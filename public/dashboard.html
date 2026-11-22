@@ -139,6 +139,19 @@
                                         <label for="imagenUrl">URL de Imagen (Opcional)</label>
                                         <input type="url" id="imagenUrl" class="form-control" placeholder="Ej: https://upload.wikimedia.org/.../imagen.jpg">
                                     </div>
+                                    <div class="form-group">
+                                        <label for="precisionFecha">Precisión de la fecha</label>
+                                        <select id="precisionFecha" class="form-control">
+                                            <option value="exacta">Exacta</option>
+                                            <option value="aproximada">Aproximada (c.)</option>
+                                            <option value="siglo">Siglo</option>
+                                            <option value="decada">Década</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group full-width">
+                                        <label for="interpretacionEvento">Interpretación (opcional, separada de la descripción)</label>
+                                        <textarea id="interpretacionEvento" class="form-control" placeholder="Qué significa este hecho para comparar las líneas..."></textarea>
+                                    </div>
                                 </div>
                                 <div style="display: flex; gap: 10px; margin-top: 15px;">
                                     <button type="submit" class="btn" id="btnGuardarEvento" style="flex: 2;">Añadir Evento a la Línea</button>
@@ -231,6 +244,83 @@
                         <button type="button" id="btnExportarJSON" class="btn" style="flex: 1;">Exportar JSON</button>
                         <button type="button" id="btnExportarCSV" class="btn" style="flex: 1;">Exportar CSV</button>
                     </div>
+
+                    <h4 style="color: white; margin: 2rem 0 1rem;">Relaciones causales</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="relOrigen">Evento origen</label>
+                            <select id="relOrigen" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="relDestino">Evento destino</label>
+                            <select id="relDestino" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="relTipo">Tipo de relación</label>
+                            <select id="relTipo" class="form-control">
+                                <option value="causa">Causa</option>
+                                <option value="consecuencia">Consecuencia</option>
+                                <option value="contemporaneo">Contemporáneo</option>
+                                <option value="influencia">Influencia</option>
+                                <option value="respuesta">Respuesta</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="relNota">Nota (opcional)</label>
+                            <input type="text" id="relNota" class="form-control" maxlength="300">
+                        </div>
+                    </div>
+                    <button type="button" id="btnAgregarRelacion" class="btn" style="margin-top: 10px;">Añadir Relación</button>
+                    <ul id="listaRelaciones" style="margin-top: 10px; color: rgba(255,255,255,0.85);"></ul>
+
+                    <h4 style="color: white; margin: 2rem 0 1rem;">Fuentes de un evento</h4>
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="fuenteEvento">Evento</label>
+                            <select id="fuenteEvento" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="fuenteTitulo">Título de la fuente</label>
+                            <input type="text" id="fuenteTitulo" class="form-control" maxlength="200">
+                        </div>
+                        <div class="form-group">
+                            <label for="fuenteAutor">Autor (opcional)</label>
+                            <input type="text" id="fuenteAutor" class="form-control" maxlength="150">
+                        </div>
+                        <div class="form-group">
+                            <label for="fuenteAnio">Año (opcional)</label>
+                            <input type="number" id="fuenteAnio" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="fuenteTipo">Tipo</label>
+                            <select id="fuenteTipo" class="form-control">
+                                <option value="primaria">Primaria</option>
+                                <option value="secundaria">Secundaria</option>
+                                <option value="enciclopedia">Enciclopedia</option>
+                                <option value="otra">Otra</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="fuenteUrl">URL (opcional)</label>
+                            <input type="url" id="fuenteUrl" class="form-control">
+                        </div>
+                    </div>
+                    <button type="button" id="btnAgregarFuente" class="btn" style="margin-top: 10px;">Añadir Fuente</button>
+                    <ul id="listaFuentes" style="margin-top: 10px; color: rgba(255,255,255,0.85);"></ul>
+
+                    <h4 style="color: white; margin: 2rem 0 1rem;">Preguntas guiadas</h4>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="nuevaPregunta" class="form-control" maxlength="400" placeholder="Ej: ¿Qué conecta la crisis de 1929 con el golpe de 1973?" style="flex: 1;">
+                        <button type="button" id="btnAgregarPregunta" class="btn" style="width: auto;">Añadir</button>
+                    </div>
+                    <ol id="listaPreguntasEdicion" style="margin-top: 10px; color: rgba(255,255,255,0.85);"></ol>
+
+                    <h4 style="color: white; margin: 2rem 0 1rem;">Asignar a estudiantes</h4>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="rutEstudianteAsignar" class="form-control" placeholder="RUT del estudiante" style="flex: 1;">
+                        <button type="button" id="btnAsignarEstudiante" class="btn" style="width: auto;">Asignar</button>
+                    </div>
+                    <ul id="listaAsignaciones" style="margin-top: 10px; color: rgba(255,255,255,0.85);"></ul>
                 </div>
             </div>
 

@@ -698,6 +698,7 @@ async function validarLineas(conexionPool, lineas) {
 }
 
 async function insertarLineas(transaccion, id_escena, lineasValidas) {
+    const insertados = new Map();
     const existentesRes = await new sql.Request(transaccion)
         .input('id_escena', sql.Int, id_escena)
         .query('SELECT id_linea, nombre_linea FROM Lineas_Tiempo WHERE id_escena = @id_escena');
@@ -722,7 +723,7 @@ async function insertarLineas(transaccion, id_escena, lineasValidas) {
         }
 
         for (const evento of linea.eventos) {
-            await new sql.Request(transaccion)
+            const eventoRes = await new sql.Request(transaccion)
                 .input('id_linea', sql.Int, id_linea)
                 .input('id_categoria', sql.Int, evento.id_categoria)
                 .input('titulo_evento', sql.VarChar, evento.titulo_evento)
@@ -735,9 +736,51 @@ async function insertarLineas(transaccion, id_escena, lineasValidas) {
                 .input('interpretacion', sql.Text, evento.interpretacion)
                 .query(`
                     INSERT INTO Eventos_Historicos (id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url, fuente_url, precision_fecha, interpretacion)
+                    OUTPUT INSERTED.id_evento
                     VALUES (@id_linea, @id_categoria, @titulo_evento, @anio_inicio, @anio_fin, @descripcion, @imagen_url, @fuente_url, @precision_fecha, @interpretacion)
                 `);
+            insertados.set(evento.titulo_evento.toLowerCase(), eventoRes.recordset[0].id_evento);
         }
+    }
+    return insertados;
+}
+
+async function resolverEventoEnEscena(transaccion, id_escena, titulo, insertados) {
+    const clave = titulo.toLowerCase();
+    if (insertados.has(clave)) return insertados.get(clave);
+
+    const resultado = await new sql.Request(transaccion)
+        .input('id_escena', sql.Int, id_escena)
+        .input('titulo', sql.VarChar, titulo)
+        .query(`
+            SELECT TOP 1 V.id_evento
+            FROM Eventos_Historicos V
+            JOIN Lineas_Tiempo L ON V.id_linea = L.id_linea
+            WHERE L.id_escena = @id_escena AND V.titulo_evento = @titulo
+        `);
+    return resultado.recordset[0] ? resultado.recordset[0].id_evento : null;
+}
+
+async function insertarRelacionesYPreguntas(transaccion, id_escena, relaciones, preguntas, insertados) {
+    for (const relacion of relaciones || []) {
+        const origen = await resolverEventoEnEscena(transaccion, id_escena, relacion.titulo_origen, insertados);
+        const destino = await resolverEventoEnEscena(transaccion, id_escena, relacion.titulo_destino, insertados);
+        if (!origen || !destino || origen === destino || !TIPOS_RELACION.includes(relacion.tipo)) continue;
+
+        await new sql.Request(transaccion)
+            .input('origen', sql.Int, origen)
+            .input('destino', sql.Int, destino)
+            .input('tipo', sql.VarChar, relacion.tipo)
+            .input('nota', sql.VarChar, relacion.nota ? String(relacion.nota).slice(0, 300) : null)
+            .query('INSERT INTO Relaciones_Eventos (id_evento_origen, id_evento_destino, tipo, nota) VALUES (@origen, @destino, @tipo, @nota)');
+    }
+
+    for (const texto of (preguntas || []).slice(0, 10)) {
+        if (!texto) continue;
+        await new sql.Request(transaccion)
+            .input('id_escena', sql.Int, id_escena)
+            .input('texto', sql.VarChar, String(texto).slice(0, 400))
+            .query('INSERT INTO Preguntas_Escena (id_escena, texto) VALUES (@id_escena, @texto)');
     }
 }
 
@@ -804,13 +847,16 @@ app.post('/api/escenas/importar', async (req, res) => {
 // Inicio agregar lineas a escena existente (usado por la propuesta de IA)
 app.post('/api/escenas/:id/lineas-importar', async (req, res) => {
     try {
-        const { rut_usuario, lineas } = req.body;
+        const { rut_usuario, lineas, relaciones, preguntas } = req.body;
         const conexionPool = await promesaPool;
         const escena = await obtenerEscenaDeUsuario(conexionPool, req.params.id, rut_usuario);
         if (!escena) return res.status(404).json({ error: 'Escena no encontrada para este usuario' });
 
         const lineasValidas = await validarLineas(conexionPool, lineas);
-        await ejecutarEnTransaccion(conexionPool, (transaccion) => insertarLineas(transaccion, escena.id_escena, lineasValidas));
+        await ejecutarEnTransaccion(conexionPool, async (transaccion) => {
+            const insertados = await insertarLineas(transaccion, escena.id_escena, lineasValidas);
+            await insertarRelacionesYPreguntas(transaccion, escena.id_escena, relaciones, preguntas, insertados);
+        });
         res.status(201).json({ mensaje: 'Propuesta añadida a la escena' });
     } catch (error) {
         if (error.status === 400) return res.status(400).json({ error: error.message });
@@ -1026,8 +1072,29 @@ app.post('/api/ia/propuesta', async (req, res) => {
             throw error;
         }
 
+        const normalizar = (texto) => String(texto || '').trim().toLowerCase();
+        const titulosDisponibles = new Set([
+            ...eventos.map(e => normalizar(e.titulo_evento)),
+            ...titulosRes.recordset.map(t => normalizar(t.titulo_evento))
+        ]);
+        const relacionesPropuestas = Array.isArray(datos.relaciones) ? datos.relaciones : [];
+        const relaciones = relacionesPropuestas.filter(r =>
+            TIPOS_RELACION.includes(r.tipo)
+            && titulosDisponibles.has(normalizar(r.titulo_origen))
+            && titulosDisponibles.has(normalizar(r.titulo_destino))
+            && normalizar(r.titulo_origen) !== normalizar(r.titulo_destino)
+        );
+        const textos = (lista) => (Array.isArray(lista) ? lista : [])
+            .filter(t => typeof t === 'string' && t.trim())
+            .map(t => t.trim().slice(0, 400))
+            .slice(0, 10);
+
         res.status(200).json({
             lineas,
+            relaciones,
+            relaciones_descartadas: relacionesPropuestas.length - relaciones.length,
+            preguntas: textos(datos.preguntas),
+            advertencias: textos(datos.advertencias),
             fuentes_no_verificadas: accesibles.filter(a => !a).length
         });
     } catch (error) {

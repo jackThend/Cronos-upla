@@ -13,7 +13,7 @@ Aplicación web para construir escenas crono-espaciales: líneas de tiempo por z
    ```
    npm install
    ```
-2. Crear la base de datos con `script_db.sql` y luego ejecutar `migracion_ia.sql`.
+2. Crear la base de datos con `script_db.sql` y luego ejecutar, en este orden, `migracion_ia.sql` y `migracion_mejoras.sql`.
 3. Copiar `.env.example` a `.env` y completar los valores. Las dos claves secretas se generan con:
    ```
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -28,10 +28,21 @@ Aplicación web para construir escenas crono-espaciales: líneas de tiempo por z
 ## Funcionalidades
 
 - **Constructor de escenas**: escenas, líneas de tiempo y eventos con categoría, años (negativos para a.C.), descripción, imagen y fuente.
-- **Lienzo**: vista comparativa de las líneas en un eje temporal con zoom. Permite exportar a PNG y PDF.
+- **Lienzo**: vista comparativa de las líneas en un eje temporal con zoom, cursor que resalta los eventos activos en cada carril, filtros por categoría, periodo, alineación relativa al inicio de cada línea y escala de larga duración. Muestra relaciones causales como arcos entre eventos, y permite buscar un evento, presentarlo paso a paso, ver preguntas guiadas y un análisis automático (densidad por década, periodos sin eventos, solapamientos). Exporta a PNG, PDF y ficha comparativa.
+- **Fechas con precisión**: exacta, aproximada, siglo o década.
+- **Fuentes e interpretación**: varias fuentes por evento con cita estilo APA, y una nota de interpretación separada de la descripción.
+- **Modo docente**: asignar escenas a estudiantes, que las ven en su explorador, y crear preguntas guiadas.
 - **Importar / exportar**: escenas en JSON o CSV (separador `;`, compatible con Excel).
 - **Plantillas**: escenas predefinidas en la carpeta `plantillas/`. Para agregar una, crear un JSON con el mismo formato que los existentes.
 - **Asistente IA** (opcional): cada usuario guarda su propia API key de OpenAI, Groq, OpenRouter o Anthropic. La IA propone líneas y eventos para una escena, y el usuario los revisa antes de añadirlos. Las fuentes se comprueban y se descartan si no responden.
+
+## Pruebas
+
+```
+npm test
+```
+
+Las pruebas de la API usan una base de datos simulada en memoria (`tests/fake-db.js`), así que no requieren SQL Server. Las pruebas del análisis son funciones puras. Las pruebas no cubren la interfaz del navegador.
 
 ## Seguridad
 

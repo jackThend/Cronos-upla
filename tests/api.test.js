@@ -420,6 +420,36 @@ describe('preguntas y asignaciones', () => {
     });
 });
 
+describe('propuesta de IA aceptada', () => {
+    test('guarda eventos nuevos, relaciones válidas y preguntas, y descarta relaciones con títulos inexistentes', async () => {
+        const escena = await crearEscenaConEventos(tokenA, 'IA aceptada', LINEAS_PRUEBA);
+        const antes = await pedir('GET', `/api/escenas/${escena.id_escena}/detalle`);
+        const relacionesAntes = antes.datos.relaciones.length;
+
+        const { status } = await pedir('POST', `/api/escenas/${escena.id_escena}/lineas-importar`, {
+            token: tokenA,
+            cuerpo: {
+                lineas: [{ nombre_linea: 'Europa', nombre_zona: 'Europa', eventos: [
+                    { titulo_evento: 'Tratado de Versalles', anio_inicio: 1919, nombre_categoria: 'Política', descripcion: 'x' }
+                ] }],
+                relaciones: [
+                    { titulo_origen: 'Gran Guerra', titulo_destino: 'Tratado de Versalles', tipo: 'consecuencia', nota: 'El tratado cierra la guerra' },
+                    { titulo_origen: 'Gran Guerra', titulo_destino: 'Evento inventado', tipo: 'causa' }
+                ],
+                preguntas: ['¿Qué tienen en común el tratado de Versalles y la guerra sino-japonesa?']
+            }
+        });
+        assert.equal(status, 201);
+
+        const despues = await pedir('GET', `/api/escenas/${escena.id_escena}/detalle`);
+        assert.equal(despues.datos.relaciones.length, relacionesAntes + 1);
+        assert.ok(despues.datos.relaciones.some(r => r.tipo === 'consecuencia'));
+        assert.equal(despues.datos.preguntas.length, 1);
+        const nombres = despues.datos.lineas.flatMap(l => l.eventos).map(e => e.titulo_evento);
+        assert.ok(nombres.includes('Tratado de Versalles'));
+    });
+});
+
 // Va al final: el límite de intentos bloquea la IP para el resto de las pruebas.
 describe('limite de intentos de login', () => {
     test('bloquea con 429 tras 5 intentos fallidos', async () => {

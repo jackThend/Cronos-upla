@@ -117,7 +117,13 @@ function ejecutar(texto, p) {
             precision_fecha: p.precision_fecha,
             fuente_url: p.fuente_url
         });
-        return filas([]);
+        return filas([{ id_evento }]);
+    }
+
+    if (t.includes('SELECT TOP 1 V.id_evento')) {
+        const evento = estado.eventos.find(v => v.titulo_evento === p.titulo
+            && estado.lineas.some(l => l.id_linea === v.id_linea && String(l.id_escena) === String(p.id_escena)));
+        return filas(evento ? [{ id_evento: evento.id_evento }] : []);
     }
 
     if (t.includes('MERGE Configuracion_IA')) {

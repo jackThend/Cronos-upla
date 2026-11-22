@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/api.test.js",
+    "test": "node --test tests/api.test.js tests/analisis.test.js",
     "start": "node server.js",
     "dev": "node server.js"
   },
