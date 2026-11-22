@@ -1,0 +1,45 @@
+{
+  "nombre": "Siglo XX: guerras y política",
+  "descripcion": "Comparación de hechos políticos y bélicos del siglo XX en cuatro continentes.",
+  "lineas": [
+    {
+      "nombre_linea": "Europa",
+      "nombre_zona": "Europa",
+      "color_personalizado": "#4a90e2",
+      "eventos": [
+        { "titulo_evento": "Primera Guerra Mundial", "anio_inicio": 1914, "anio_fin": 1918, "nombre_categoria": "Guerra", "descripcion": "Conflicto bélico que enfrentó a las principales potencias europeas." },
+        { "titulo_evento": "Tratado de Versalles", "anio_inicio": 1919, "nombre_categoria": "Política", "descripcion": "Tratado de paz que puso fin oficialmente a la Primera Guerra Mundial." },
+        { "titulo_evento": "Crisis económica de 1929", "anio_inicio": 1929, "nombre_categoria": "Social", "descripcion": "Crisis financiera mundial iniciada con el colapso de la bolsa de Nueva York." },
+        { "titulo_evento": "Guerra Civil Española", "anio_inicio": 1936, "anio_fin": 1939, "nombre_categoria": "Guerra", "descripcion": "Conflicto interno entre el bando republicano y el bando sublevado." },
+        { "titulo_evento": "Invasión alemana de Polonia", "anio_inicio": 1939, "nombre_categoria": "Guerra", "descripcion": "Inicio de la Segunda Guerra Mundial en Europa." },
+        { "titulo_evento": "Fin de la guerra en Europa", "anio_inicio": 1945, "nombre_categoria": "Guerra", "descripcion": "Rendición de la Alemania nazi en mayo de 1945." }
+      ]
+    },
+    {
+      "nombre_linea": "Asia",
+      "nombre_zona": "Asia",
+      "color_personalizado": "#e74c3c",
+      "eventos": [
+        { "titulo_evento": "Restauración Meiji", "anio_inicio": 1868, "nombre_categoria": "Política", "descripcion": "Inicio de la modernización política y social de Japón." },
+        { "titulo_evento": "Guerra sino-japonesa", "anio_inicio": 1937, "anio_fin": 1945, "nombre_categoria": "Guerra", "descripcion": "Conflicto entre China y Japón que se integró en la Segunda Guerra Mundial." },
+        { "titulo_evento": "Bombardeo atómico de Hiroshima", "anio_inicio": 1945, "nombre_categoria": "Guerra", "descripcion": "Primer uso bélico de una bomba atómica, el 6 de agosto de 1945." }
+      ]
+    },
+    {
+      "nombre_linea": "América",
+      "nombre_zona": "América",
+      "color_personalizado": "#2ecc71",
+      "eventos": [
+        { "titulo_evento": "Golpe de Estado en Chile", "anio_inicio": 1973, "nombre_categoria": "Política", "descripcion": "Derrocamiento del gobierno de Salvador Allende el 11 de septiembre de 1973." }
+      ]
+    },
+    {
+      "nombre_linea": "África",
+      "nombre_zona": "África",
+      "color_personalizado": "#f39c12",
+      "eventos": [
+        { "titulo_evento": "Revolución egipcia", "anio_inicio": 1952, "nombre_categoria": "Política", "descripcion": "Movimiento de los Oficiales Libres que derrocó a la monarquía egipcia." }
+      ]
+    }
+  ]
+}

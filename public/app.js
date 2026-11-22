@@ -1,8 +1,23 @@
 // Inicio URLs
 const API_URL = '/api';
 
+// Inicio token de sesion en peticiones a la API
+const fetchSinToken = window.fetch.bind(window);
+window.fetch = (url, opciones = {}) => {
+    const token = localStorage.getItem('token_cronos');
+    if (typeof url === 'string' && url.startsWith(`${API_URL}/`) && token) {
+        opciones = { ...opciones, headers: { ...(opciones.headers || {}), Authorization: `Bearer ${token}` } };
+    }
+    return fetchSinToken(url, opciones);
+};
+
 // Inicio parseo JSON
 const manejarRespuesta = async (respuesta) => {
+    if (respuesta.status === 401) {
+        localStorage.removeItem('usuario_cronos');
+        localStorage.removeItem('token_cronos');
+        window.location.href = 'index.html';
+    }
     const datos = await respuesta.json();
     if (!respuesta.ok) {
         throw new Error(datos.error || 'Error desconocido');
@@ -55,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Guardado sesion
                 localStorage.setItem('usuario_cronos', JSON.stringify(datos.usuario));
+                localStorage.setItem('token_cronos', datos.token);
                 // Redireccion rol
                 if (datos.usuario.id_perfil === 2) {
                     window.location.href = 'explorador.html';
@@ -108,6 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnLogout) {
         btnLogout.addEventListener('click', () => {
             localStorage.removeItem('usuario_cronos');
+            localStorage.removeItem('token_cronos');
             window.location.href = 'index.html';
         });
     }
@@ -162,8 +179,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const targetId = tab.getAttribute('data-tab');
             document.getElementById(targetId).classList.add('active');
 
+            if (targetId === 'tab-ia') {
+                cargarConfigIA();
+                cargarEscenasIA();
+            }
+
             if (targetId === 'tab-gestor') {
                 cargarMisEscenas();
+                cargarPlantillas();
                 document.getElementById('gestorListaEscenas').classList.remove('hidden');
                 document.getElementById('gestorEdicionProfunda').classList.add('hidden');
             }
@@ -637,6 +660,422 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // ========================================================
+    // Inicio asistente IA
+    // ========================================================
+    let propuestaIA = null;
+
+    function escaparHTML(texto) {
+        return String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function cargarConfigIA() {
+        const selectorProveedor = document.getElementById('iaProveedor');
+        const estado = document.getElementById('iaEstado');
+        if (!selectorProveedor) return;
+
+        try {
+            if (selectorProveedor.options.length <= 1) {
+                const respProv = await fetch(`${API_URL}/ia/proveedores`);
+                const datosProv = await manejarRespuesta(respProv);
+                datosProv.resultados.forEach(p => {
+                    selectorProveedor.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+                });
+            }
+
+            const respuesta = await fetch(`${API_URL}/ia/configuracion/${rutUsuario}`);
+            const config = await manejarRespuesta(respuesta);
+            if (config.configurado) {
+                selectorProveedor.value = config.proveedor;
+                document.getElementById('iaModelo').value = config.modelo;
+                estado.textContent = `Clave guardada: ${config.clave_mascarada}`;
+            } else {
+                estado.textContent = 'Aún no has guardado una API key.';
+            }
+        } catch (error) {
+            estado.textContent = `Error: ${error.message}`;
+        }
+    }
+
+    async function cargarEscenasIA() {
+        const selector = document.getElementById('iaEscena');
+        if (!selector) return;
+
+        try {
+            const respuesta = await fetch(`${API_URL}/escenas/usuario/${rutUsuario}`);
+            const datos = await manejarRespuesta(respuesta);
+            const valorActual = selector.value;
+            selector.innerHTML = '<option value="">-- Seleccionar Escena --</option>';
+            datos.resultados.forEach(e => {
+                selector.innerHTML += `<option value="${e.id_escena}">${e.nombre_escena}</option>`;
+            });
+            selector.value = valorActual;
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    }
+
+    document.getElementById('btnGuardarIA')?.addEventListener('click', async () => {
+        const proveedor = document.getElementById('iaProveedor').value;
+        const modelo = document.getElementById('iaModelo').value.trim();
+        const apiKey = document.getElementById('iaApiKey').value.trim();
+        if (!proveedor || !modelo || !apiKey) {
+            showToast("Completa proveedor, modelo y API key", true);
+            return;
+        }
+
+        try {
+            const respuesta = await fetch(`${API_URL}/ia/configuracion`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rut_usuario: rutUsuario, proveedor, modelo, api_key: apiKey })
+            });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            document.getElementById('iaApiKey').value = '';
+            cargarConfigIA();
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    });
+
+    document.getElementById('btnEliminarIA')?.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar tu API key de IA?')) return;
+
+        try {
+            const respuesta = await fetch(`${API_URL}/ia/configuracion/${rutUsuario}`, { method: 'DELETE' });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            cargarConfigIA();
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    });
+
+    function renderizarPropuestaIA(datos) {
+        const contenedor = document.getElementById('iaPropuesta');
+        const filas = datos.lineas.flatMap(linea => (linea.eventos || []).map(evento => {
+            const fuente = evento.fuente_url
+                ? `<a href="${escaparHTML(evento.fuente_url)}" target="_blank" rel="noopener">Ver fuente</a>`
+                : '<span style="color: #f39c12;">Sin fuente verificada</span>';
+            return `
+                <tr>
+                    <td>${escaparHTML(linea.nombre_linea)}</td>
+                    <td>${escaparHTML(evento.titulo_evento)}</td>
+                    <td>${escaparHTML(evento.anio_inicio)}${evento.anio_fin ? ' – ' + escaparHTML(evento.anio_fin) : ''}</td>
+                    <td>${escaparHTML(evento.nombre_categoria)}</td>
+                    <td>${fuente}</td>
+                </tr>`;
+        }));
+
+        contenedor.innerHTML = `
+            <p style="color: #ccc; margin-bottom: 10px;">${datos.lineas.length} línea(s) y ${filas.length} evento(s) propuestos. ${datos.fuentes_no_verificadas} fuente(s) no respondieron y se quitaron. Revisa fechas y contenido antes de añadirlos: la IA puede equivocarse.</p>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Línea</th><th>Evento</th><th>Años</th><th>Categoría</th><th>Fuente</th></tr>
+                    </thead>
+                    <tbody>${filas.join('')}</tbody>
+                </table>
+            </div>
+            <button type="button" id="btnAceptarPropuesta" class="btn" style="margin-top: 15px;">Añadir Propuesta a la Escena</button>
+        `;
+        document.getElementById('btnAceptarPropuesta').addEventListener('click', aceptarPropuestaIA);
+    }
+
+    document.getElementById('btnGenerarPropuesta')?.addEventListener('click', async () => {
+        const idEscena = document.getElementById('iaEscena').value;
+        const instruccion = document.getElementById('iaInstruccion').value.trim();
+        const contenedor = document.getElementById('iaPropuesta');
+        if (!idEscena || !instruccion) {
+            showToast("Selecciona una escena y escribe una instrucción", true);
+            return;
+        }
+
+        propuestaIA = null;
+        contenedor.innerHTML = '<p style="color: #ccc;">Generando propuesta...</p>';
+        try {
+            const respuesta = await fetch(`${API_URL}/ia/propuesta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rut_usuario: rutUsuario, id_escena: idEscena, instruccion })
+            });
+            const datos = await manejarRespuesta(respuesta);
+            propuestaIA = { id_escena: idEscena, lineas: datos.lineas };
+            renderizarPropuestaIA(datos);
+        } catch (error) {
+            contenedor.innerHTML = `<p style="color: #ff6b6b;">Error: ${escaparHTML(error.message)}</p>`;
+        }
+    });
+
+    async function aceptarPropuestaIA() {
+        if (!propuestaIA) return;
+
+        try {
+            const respuesta = await fetch(`${API_URL}/escenas/${propuestaIA.id_escena}/lineas-importar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rut_usuario: rutUsuario, lineas: propuestaIA.lineas })
+            });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            propuestaIA = null;
+            document.getElementById('iaPropuesta').innerHTML = '';
+            document.getElementById('iaInstruccion').value = '';
+            await refrescarEscenas();
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    }
+
+    // ========================================================
+    // Inicio plantillas, importacion y exportacion
+    // ========================================================
+    async function cargarPlantillas() {
+        const selector = document.getElementById('selectPlantilla');
+        if (!selector) return;
+
+        try {
+            const respuesta = await fetch(`${API_URL}/plantillas`);
+            const datos = await manejarRespuesta(respuesta);
+            selector.innerHTML = '<option value="">-- Seleccionar Plantilla --</option>';
+            datos.resultados.forEach(p => {
+                selector.innerHTML += `<option value="${p.id}">${p.nombre} (${p.total_lineas} líneas)</option>`;
+            });
+        } catch (error) {
+            selector.innerHTML = '<option value="">-- Error al cargar plantillas --</option>';
+        }
+    }
+
+    async function refrescarEscenas() {
+        await iniciarConstructor();
+        cargarMisEscenas();
+    }
+
+    document.getElementById('btnCrearDesdePlantilla')?.addEventListener('click', async () => {
+        const idPlantilla = document.getElementById('selectPlantilla').value;
+        if (!idPlantilla) {
+            showToast("Selecciona una plantilla", true);
+            return;
+        }
+
+        const nombreEscena = document.getElementById('nombrePlantillaEscena').value.trim();
+        try {
+            const respuesta = await fetch(`${API_URL}/plantillas/${idPlantilla}/crear-escena`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre_escena: nombreEscena, rut_usuario: rutUsuario })
+            });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            document.getElementById('nombrePlantillaEscena').value = '';
+            await refrescarEscenas();
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    });
+
+    function parsearCSV(texto) {
+        const contenido = texto.replace(/^\uFEFF/, '');
+        const primeraLinea = contenido.split(/\r?\n/)[0] || '';
+        const separador = primeraLinea.includes(';') ? ';' : ',';
+        const filas = [];
+        let fila = [];
+        let campo = '';
+        let enComillas = false;
+
+        for (let i = 0; i < contenido.length; i++) {
+            const caracter = contenido[i];
+            if (enComillas) {
+                if (caracter === '"' && contenido[i + 1] === '"') {
+                    campo += '"';
+                    i++;
+                } else if (caracter === '"') {
+                    enComillas = false;
+                } else {
+                    campo += caracter;
+                }
+            } else if (caracter === '"') {
+                enComillas = true;
+            } else if (caracter === separador) {
+                fila.push(campo);
+                campo = '';
+            } else if (caracter === '\n' || caracter === '\r') {
+                if (caracter === '\r' && contenido[i + 1] === '\n') i++;
+                fila.push(campo);
+                filas.push(fila);
+                fila = [];
+                campo = '';
+            } else {
+                campo += caracter;
+            }
+        }
+        if (campo !== '' || fila.length > 0) {
+            fila.push(campo);
+            filas.push(fila);
+        }
+
+        return filas.filter(f => f.some(valor => valor.trim() !== ''));
+    }
+
+    function convertirCSVAEscena(texto) {
+        const [cabecera, ...filas] = parsearCSV(texto);
+        if (!cabecera) throw new Error('El archivo CSV está vacío');
+
+        const columnas = cabecera.map(c => c.trim().toLowerCase());
+        ['linea', 'zona'].forEach(requerida => {
+            if (!columnas.includes(requerida)) throw new Error(`Falta la columna "${requerida}" en el CSV`);
+        });
+
+        const lineas = new Map();
+        filas.forEach((fila, indice) => {
+            const valor = (nombre) => {
+                const posicion = columnas.indexOf(nombre);
+                return posicion >= 0 ? (fila[posicion] || '').trim() : '';
+            };
+
+            const nombreLinea = valor('linea');
+            if (!nombreLinea) throw new Error(`La fila ${indice + 2} no tiene nombre de línea`);
+
+            if (!lineas.has(nombreLinea)) {
+                lineas.set(nombreLinea, {
+                    nombre_linea: nombreLinea,
+                    nombre_zona: valor('zona'),
+                    color_personalizado: valor('color'),
+                    eventos: []
+                });
+            }
+
+            const titulo = valor('titulo');
+            if (titulo) {
+                lineas.get(nombreLinea).eventos.push({
+                    titulo_evento: titulo,
+                    anio_inicio: valor('anio_inicio'),
+                    anio_fin: valor('anio_fin'),
+                    nombre_categoria: valor('categoria'),
+                    descripcion: valor('descripcion'),
+                    imagen_url: valor('imagen_url'),
+                    fuente_url: valor('fuente_url')
+                });
+            }
+        });
+
+        return { lineas: [...lineas.values()] };
+    }
+
+    function convertirJSONAEscena(texto) {
+        const datos = JSON.parse(texto);
+        if (!Array.isArray(datos.lineas)) throw new Error('El archivo JSON no contiene líneas');
+        return datos;
+    }
+
+    document.getElementById('btnImportarEscena')?.addEventListener('click', async () => {
+        const archivo = document.getElementById('archivoImportar').files[0];
+        if (!archivo) {
+            showToast("Selecciona un archivo CSV o JSON", true);
+            return;
+        }
+
+        try {
+            const texto = await archivo.text();
+            const escena = archivo.name.toLowerCase().endsWith('.json')
+                ? convertirJSONAEscena(texto)
+                : convertirCSVAEscena(texto);
+            const nombreEscena = document.getElementById('nombreImportarEscena').value.trim()
+                || escena.nombre_escena
+                || archivo.name.replace(/\.(csv|json)$/i, '');
+
+            const respuesta = await fetch(`${API_URL}/escenas/importar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre_escena: nombreEscena, rut_usuario: rutUsuario, lineas: escena.lineas })
+            });
+            const datos = await manejarRespuesta(respuesta);
+            showToast(datos.mensaje);
+            document.getElementById('archivoImportar').value = '';
+            document.getElementById('nombreImportarEscena').value = '';
+            await refrescarEscenas();
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    });
+
+    async function obtenerEscenaParaExportar(idEscena) {
+        const respuesta = await fetch(`${API_URL}/escenas/${idEscena}/detalle`);
+        const escena = await manejarRespuesta(respuesta);
+        return {
+            formato: 'cronos-escena',
+            version: 1,
+            nombre_escena: escena.nombre_escena,
+            lineas: escena.lineas.map(linea => ({
+                nombre_linea: linea.nombre_linea,
+                nombre_zona: linea.nombre_zona,
+                color_personalizado: linea.color_personalizado,
+                eventos: (linea.eventos || []).map(evento => ({
+                    titulo_evento: evento.titulo_evento,
+                    anio_inicio: evento.anio_inicio,
+                    anio_fin: evento.anio_fin,
+                    nombre_categoria: evento.nombre_categoria,
+                    descripcion: evento.descripcion,
+                    imagen_url: evento.imagen_url,
+                    fuente_url: evento.fuente_url
+                }))
+            }))
+        };
+    }
+
+    function celdaCSV(valor) {
+        const texto = valor === null || valor === undefined ? '' : String(valor);
+        return /["\n\r;]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+    }
+
+    function nombreArchivoSeguro(nombre) {
+        return nombre.replace(/[^\p{L}\p{N}\-]+/gu, '_').replace(/^_+|_+$/g, '') || 'escena';
+    }
+
+    function descargarArchivo(contenido, nombreArchivo, tipo) {
+        const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = nombreArchivo;
+        enlace.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    document.getElementById('btnExportarJSON')?.addEventListener('click', async () => {
+        const idEscena = document.getElementById('idEscenaRenombrar').value;
+        if (!idEscena) return;
+
+        try {
+            const escena = await obtenerEscenaParaExportar(idEscena);
+            descargarArchivo(JSON.stringify(escena, null, 2), `${nombreArchivoSeguro(escena.nombre_escena)}.json`, 'application/json');
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    });
+
+    document.getElementById('btnExportarCSV')?.addEventListener('click', async () => {
+        const idEscena = document.getElementById('idEscenaRenombrar').value;
+        if (!idEscena) return;
+
+        try {
+            const escena = await obtenerEscenaParaExportar(idEscena);
+            const filas = ['linea;zona;color;titulo;anio_inicio;anio_fin;categoria;descripcion;imagen_url;fuente_url'];
+            escena.lineas.forEach(linea => {
+                const base = [linea.nombre_linea, linea.nombre_zona, linea.color_personalizado];
+                if (linea.eventos.length === 0) {
+                    filas.push([...base, '', '', '', '', '', '', ''].map(celdaCSV).join(';'));
+                }
+                linea.eventos.forEach(evento => {
+                    filas.push([...base, evento.titulo_evento, evento.anio_inicio, evento.anio_fin, evento.nombre_categoria, evento.descripcion, evento.imagen_url, evento.fuente_url].map(celdaCSV).join(';'));
+                });
+            });
+            descargarArchivo('\uFEFF' + filas.join('\r\n'), `${nombreArchivoSeguro(escena.nombre_escena)}.csv`, 'text/csv;charset=utf-8');
+        } catch (error) {
+            showToast(`Error: ${error.message}`, true);
+        }
+    });
+
 });
 
 // ==========================================
@@ -994,6 +1433,13 @@ function _abrirModal(evento, colorLinea) {
     categoriaModal.style.background = colorLinea;
     descModal.textContent = evento.descripcion || 'Sin descripción detallada.';
 
+    const fuenteModal = document.getElementById('modalFuente');
+    if (fuenteModal) {
+        fuenteModal.innerHTML = evento.fuente_url
+            ? `<a href="${evento.fuente_url.replace(/"/g, '&quot;')}" target="_blank" rel="noopener" style="color: #4a90e2;">Ver fuente</a>`
+            : '';
+    }
+
     capa.classList.remove('hidden');
 }
 
@@ -1147,6 +1593,61 @@ window.cargarLienzo = async function(idEscena) {
     } catch (error) {
         objetoTitulo.textContent = 'Error';
         contenedorGlobal.innerHTML = `<div style="display:flex; justify-content:center; align-items:center; height:100%;"><h2 style="color: #ff6b6b;">Error al cargar: ${error.message}</h2></div>`;
+    }
+};
+
+// Inicio exportacion lienzo
+async function _capturarLienzo() {
+    if (typeof html2canvas === 'undefined') throw new Error('No se pudo cargar la librería de captura');
+    if (!_datosEscena) throw new Error('La escena aún no está cargada');
+
+    const contenedor = document.getElementById('timelineGlobalContainer');
+    const captura = await html2canvas(contenedor, { backgroundColor: '#0a0f1e', scale: 1, useCORS: true });
+
+    const alturaCabecera = 70;
+    const salida = document.createElement('canvas');
+    salida.width = captura.width;
+    salida.height = captura.height + alturaCabecera;
+
+    const contexto = salida.getContext('2d');
+    contexto.fillStyle = '#0a0f1e';
+    contexto.fillRect(0, 0, salida.width, salida.height);
+    contexto.fillStyle = '#ffffff';
+    contexto.font = 'bold 32px sans-serif';
+    contexto.fillText(_datosEscena.nombre_escena, 24, 46);
+    contexto.drawImage(captura, 0, alturaCabecera);
+
+    return salida;
+}
+
+window.exportarLienzoPNG = async function() {
+    try {
+        const imagen = await _capturarLienzo();
+        const enlace = document.createElement('a');
+        enlace.href = imagen.toDataURL('image/png');
+        enlace.download = `${_datosEscena.nombre_escena}.png`;
+        enlace.click();
+    } catch (error) {
+        window.mostrarNotificacion(`Error al exportar PNG: ${error.message}`, true);
+    }
+};
+
+window.exportarLienzoPDF = async function() {
+    const ventana = window.open('', '_blank');
+    if (!ventana) {
+        window.mostrarNotificacion('Permite las ventanas emergentes para exportar a PDF', true);
+        return;
+    }
+
+    try {
+        const imagen = await _capturarLienzo();
+        ventana.document.write(`<!DOCTYPE html><html><head><style>@page { size: landscape; margin: 8mm; } body { margin: 0; } img { width: 100%; height: auto; }</style></head><body><img src="${imagen.toDataURL('image/png')}"></body></html>`);
+        ventana.document.title = _datosEscena.nombre_escena;
+        ventana.document.close();
+        ventana.addEventListener('load', () => ventana.print());
+    } catch (error) {
+        ventana.close();
+        window.mostrarNotificacion(`Error al exportar PDF: ${error.message}`, true);
     }
 };
 

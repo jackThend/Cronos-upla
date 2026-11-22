@@ -1,0 +1,11 @@
+{
+  "nombre": "Base por continentes",
+  "descripcion": "Estructura vacía con una línea por continente, lista para completar con eventos.",
+  "lineas": [
+    { "nombre_linea": "Europa", "nombre_zona": "Europa", "color_personalizado": "#4a90e2", "eventos": [] },
+    { "nombre_linea": "Asia", "nombre_zona": "Asia", "color_personalizado": "#e74c3c", "eventos": [] },
+    { "nombre_linea": "América", "nombre_zona": "América", "color_personalizado": "#2ecc71", "eventos": [] },
+    { "nombre_linea": "África", "nombre_zona": "África", "color_personalizado": "#f39c12", "eventos": [] },
+    { "nombre_linea": "Oceanía", "nombre_zona": "Oceanía", "color_personalizado": "#9b59b6", "eventos": [] }
+  ]
+}

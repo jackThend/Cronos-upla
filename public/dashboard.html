@@ -16,6 +16,7 @@
             <ul class="sidebar-menu">
                 <li class="active" data-tab="tab-constructor"><a href="#">Constructor de Escenas</a></li>
                 <li data-tab="tab-gestor"><a href="#">Mis Escenas Creadas</a></li>
+                <li data-tab="tab-ia"><a href="#">Asistente IA</a></li>
             </ul>
             <div style="margin-top: auto; padding-top: 20px; text-align: center; padding: 0 1rem;">
                 <a href="explorador.html" class="btn" style="display: block; margin-bottom: 15px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; text-decoration: none;">Ir al Explorador</a>
@@ -176,6 +177,32 @@
             <div id="tab-gestor" class="tab-view">
                 <div class="card" id="gestorListaEscenas">
                     <h3 class="card-title">Mis Escenas Crono-Espaciales</h3>
+                    <div class="form-grid" style="margin-bottom: 1.5rem;">
+                        <div class="form-group">
+                            <label for="selectPlantilla">Crear desde plantilla</label>
+                            <select id="selectPlantilla" class="form-control">
+                                <option value="">-- Seleccionar Plantilla --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="nombrePlantillaEscena">Nombre de la nueva escena</label>
+                            <input type="text" id="nombrePlantillaEscena" class="form-control" placeholder="Opcional: usa el nombre de la plantilla">
+                        </div>
+                        <div class="form-group full-width">
+                            <button type="button" id="btnCrearDesdePlantilla" class="btn">Crear Escena desde Plantilla</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="archivoImportar">Importar escena (CSV o JSON)</label>
+                            <input type="file" id="archivoImportar" class="form-control" accept=".csv,.json,text/csv,application/json">
+                        </div>
+                        <div class="form-group">
+                            <label for="nombreImportarEscena">Nombre de la escena importada</label>
+                            <input type="text" id="nombreImportarEscena" class="form-control" placeholder="Opcional: usa el nombre del archivo">
+                        </div>
+                        <div class="form-group full-width">
+                            <button type="button" id="btnImportarEscena" class="btn">Importar Escena</button>
+                        </div>
+                    </div>
                     <div class="scenes-grid" id="gridMisEscenas">
                         <p style="text-align:center; color: #ccc; grid-column: 1 / -1;">Cargando tus escenas...</p>
                     </div>
@@ -200,10 +227,61 @@
                             <button type="button" id="btnBorrarEscena" class="btn" style="flex: 1; background: #e74c3c;" onclick="window.borrarEscenaC()">Eliminar Escena Completa</button>
                         </div>
                     </form>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button type="button" id="btnExportarJSON" class="btn" style="flex: 1;">Exportar JSON</button>
+                        <button type="button" id="btnExportarCSV" class="btn" style="flex: 1;">Exportar CSV</button>
+                    </div>
                 </div>
             </div>
 
 
+
+            <!-- VISTA 3: ASISTENTE IA -->
+            <div id="tab-ia" class="tab-view">
+                <div class="card">
+                    <h3 class="card-title">Configuración de IA</h3>
+                    <p style="color: rgba(255,255,255,0.7); margin-bottom: 1.5rem;">Tu API key se guarda cifrada en el servidor y nunca se vuelve a mostrar completa.</p>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="iaProveedor">Proveedor</label>
+                            <select id="iaProveedor" class="form-control">
+                                <option value="">-- Seleccionar Proveedor --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="iaModelo">Modelo</label>
+                            <input type="text" id="iaModelo" class="form-control" placeholder="Ej: gpt-4o-mini">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="iaApiKey">API key</label>
+                            <input type="password" id="iaApiKey" class="form-control" placeholder="Pega tu API key">
+                            <small id="iaEstado" style="color: rgba(255,255,255,0.6);"></small>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button type="button" id="btnGuardarIA" class="btn" style="flex: 2;">Guardar Configuración</button>
+                        <button type="button" id="btnEliminarIA" class="btn" style="flex: 1; background: #e74c3c;">Eliminar API key</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">Propuesta para una escena</h3>
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="iaEscena">Escena</label>
+                            <select id="iaEscena" class="form-control">
+                                <option value="">-- Seleccionar Escena --</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="iaInstruccion">¿Qué quieres que agregue la IA?</label>
+                            <textarea id="iaInstruccion" class="form-control" placeholder="Ej: Agrega a Asia los hitos de la guerra del Pacífico entre 1931 y 1945 y una línea nueva para Oceanía."></textarea>
+                        </div>
+                    </div>
+                    <button type="button" id="btnGenerarPropuesta" class="btn" style="margin-top: 15px;">Generar Propuesta</button>
+                    <div id="iaPropuesta" style="margin-top: 1.5rem;"></div>
+                </div>
+            </div>
 
         </main>
     </div>
