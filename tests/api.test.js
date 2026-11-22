@@ -8,6 +8,7 @@ const PUERTO = 3999;
 const BASE = `http://localhost:${PUERTO}`;
 const USUARIO_A = { rut: '11111111-1', email: 'a@test.cl', clave: 'clave-segura-123' };
 const USUARIO_B = { rut: '22222222-2', email: 'b@test.cl', clave: 'clave-segura-456' };
+const USUARIO_C = { rut: '33333333-3', email: 'c@test.cl', clave: 'clave-segura-789' };
 
 let servidor;
 let tokenA;
@@ -220,6 +221,202 @@ describe('clave de IA', () => {
         assert.equal(borrar.status, 200);
         const leer = await pedir('GET', `/api/ia/configuracion/${USUARIO_A.rut}`, { token: tokenA });
         assert.equal(leer.datos.configurado, false);
+    });
+});
+
+async function crearEscenaConEventos(token, nombre, lineas) {
+    const { status, datos } = await pedir('POST', '/api/escenas/importar', {
+        token,
+        cuerpo: { nombre_escena: nombre, lineas }
+    });
+    assert.equal(status, 201, 'la escena de prueba debe crearse');
+    const detalle = await pedir('GET', `/api/escenas/${datos.id_escena}/detalle`);
+    const eventos = detalle.datos.lineas.flatMap(l => l.eventos);
+    return { id_escena: datos.id_escena, eventos };
+}
+
+const LINEAS_PRUEBA = [
+    { nombre_linea: 'Europa', nombre_zona: 'Europa', eventos: [{ titulo_evento: 'Gran Guerra', anio_inicio: 1914, anio_fin: 1918, nombre_categoria: 'Guerra', descripcion: 'x' }] },
+    { nombre_linea: 'Asia', nombre_zona: 'Asia', eventos: [{ titulo_evento: 'Guerra sino-japonesa', anio_inicio: 1937, anio_fin: 1945, nombre_categoria: 'Guerra', descripcion: 'x' }] }
+];
+
+describe('relaciones causales', () => {
+    let escena;
+
+    before(async () => {
+        escena = await crearEscenaConEventos(tokenA, 'Relaciones', LINEAS_PRUEBA);
+    });
+
+    test('crea una relación entre dos eventos de la misma escena', async () => {
+        const [origen, destino] = escena.eventos;
+        const { status } = await pedir('POST', '/api/relaciones', {
+            token: tokenA,
+            cuerpo: { id_evento_origen: origen.id_evento, id_evento_destino: destino.id_evento, tipo: 'influencia', nota: 'Ejemplo' }
+        });
+        assert.equal(status, 201);
+    });
+
+    test('la relación aparece en el detalle público de la escena', async () => {
+        const detalle = await pedir('GET', `/api/escenas/${escena.id_escena}/detalle`);
+        assert.ok(detalle.datos.relaciones.length >= 1);
+    });
+
+    test('rechaza tipos de relación no válidos', async () => {
+        const [origen, destino] = escena.eventos;
+        const { status } = await pedir('POST', '/api/relaciones', {
+            token: tokenA,
+            cuerpo: { id_evento_origen: origen.id_evento, id_evento_destino: destino.id_evento, tipo: 'magia' }
+        });
+        assert.equal(status, 400);
+    });
+
+    test('no permite relacionar eventos de otro usuario', async () => {
+        const [origen, destino] = escena.eventos;
+        const { status } = await pedir('POST', '/api/relaciones', {
+            token: tokenB,
+            cuerpo: { id_evento_origen: origen.id_evento, id_evento_destino: destino.id_evento, tipo: 'causa' }
+        });
+        assert.equal(status, 403);
+    });
+
+    test('no permite relacionar eventos de escenas distintas', async () => {
+        const otra = await crearEscenaConEventos(tokenA, 'Otra', [LINEAS_PRUEBA[0]]);
+        const { status, datos } = await pedir('POST', '/api/relaciones', {
+            token: tokenA,
+            cuerpo: { id_evento_origen: escena.eventos[0].id_evento, id_evento_destino: otra.eventos[0].id_evento, tipo: 'causa' }
+        });
+        assert.equal(status, 400);
+        assert.match(datos.error, /misma escena/);
+    });
+
+    test('solo el dueño puede borrar una relación', async () => {
+        const [origen, destino] = escena.eventos;
+        const creada = await pedir('POST', '/api/relaciones', {
+            token: tokenA,
+            cuerpo: { id_evento_origen: origen.id_evento, id_evento_destino: destino.id_evento, tipo: 'causa' }
+        });
+        const id = creada.datos.id_relacion;
+        assert.equal((await pedir('DELETE', `/api/relaciones/${id}`, { token: tokenB })).status, 403);
+        assert.equal((await pedir('DELETE', `/api/relaciones/${id}`, { token: tokenA })).status, 200);
+    });
+});
+
+describe('fuentes, precisión e interpretación', () => {
+    let escena;
+
+    before(async () => {
+        escena = await crearEscenaConEventos(tokenA, 'Fuentes', LINEAS_PRUEBA);
+    });
+
+    test('añade una fuente a un evento y la devuelve en el detalle', async () => {
+        const idEvento = escena.eventos[0].id_evento;
+        const { status } = await pedir('POST', `/api/eventos/${idEvento}/fuentes`, {
+            token: tokenA,
+            cuerpo: { titulo: 'Tratado de Versalles', autor: 'Keynes', anio: 1919, url: 'https://example.org/versalles', tipo: 'primaria' }
+        });
+        assert.equal(status, 201);
+        const detalle = await pedir('GET', `/api/escenas/${escena.id_escena}/detalle`);
+        const evento = detalle.datos.lineas.flatMap(l => l.eventos).find(e => e.id_evento === idEvento);
+        assert.ok(evento.fuentes.length >= 1);
+    });
+
+    test('rechaza fuentes con tipo inválido o URL no http(s)', async () => {
+        const idEvento = escena.eventos[0].id_evento;
+        const tipo = await pedir('POST', `/api/eventos/${idEvento}/fuentes`, { token: tokenA, cuerpo: { titulo: 'X', tipo: 'rumor' } });
+        const url = await pedir('POST', `/api/eventos/${idEvento}/fuentes`, { token: tokenA, cuerpo: { titulo: 'X', tipo: 'otra', url: 'javascript:1' } });
+        assert.equal(tipo.status, 400);
+        assert.equal(url.status, 400);
+    });
+
+    test('no permite añadir fuentes a eventos de otro usuario', async () => {
+        const { status } = await pedir('POST', `/api/eventos/${escena.eventos[0].id_evento}/fuentes`, {
+            token: tokenB,
+            cuerpo: { titulo: 'X', tipo: 'otra' }
+        });
+        assert.equal(status, 403);
+    });
+
+    test('rechaza una precisión de fecha inválida al importar', async () => {
+        const { status, datos } = await pedir('POST', '/api/escenas/importar', {
+            token: tokenA,
+            cuerpo: {
+                nombre_escena: 'Precision',
+                lineas: [{ nombre_linea: 'L', nombre_zona: 'Europa', eventos: [{ titulo_evento: 'Antiguo', anio_inicio: -3100, nombre_categoria: 'Política', precision_fecha: 'magico' }] }]
+            }
+        });
+        assert.equal(status, 400);
+        assert.match(datos.error, /precisión/);
+    });
+
+    test('acepta precisión aproximada al importar', async () => {
+        const { status } = await pedir('POST', '/api/escenas/importar', {
+            token: tokenA,
+            cuerpo: {
+                nombre_escena: 'Precision ok',
+                lineas: [{ nombre_linea: 'L', nombre_zona: 'Europa', eventos: [{ titulo_evento: 'Antiguo', anio_inicio: -3100, nombre_categoria: 'Política', precision_fecha: 'aproximada' }] }]
+            }
+        });
+        assert.equal(status, 201);
+    });
+});
+
+describe('preguntas y asignaciones', () => {
+    const CORREO_ESTUDIANTE = '33333333-3';
+    let escena;
+
+    before(async () => {
+        escena = await crearEscenaConEventos(tokenA, 'Clase', LINEAS_PRUEBA);
+    });
+
+    test('el dueño añade preguntas guiadas y aparecen en el detalle', async () => {
+        const { status } = await pedir('POST', `/api/escenas/${escena.id_escena}/preguntas`, {
+            token: tokenA,
+            cuerpo: { texto: '¿Qué conecta la guerra de Europa con la de Asia?' }
+        });
+        assert.equal(status, 201);
+        const detalle = await pedir('GET', `/api/escenas/${escena.id_escena}/detalle`);
+        assert.equal(detalle.datos.preguntas.length, 1);
+    });
+
+    test('otro usuario no puede añadir preguntas', async () => {
+        const { status } = await pedir('POST', `/api/escenas/${escena.id_escena}/preguntas`, { token: tokenB, cuerpo: { texto: 'x' } });
+        assert.equal(status, 403);
+    });
+
+    test('solo se asigna a estudiantes (perfil 2)', async () => {
+        const { status, datos } = await pedir('POST', `/api/escenas/${escena.id_escena}/asignaciones`, {
+            token: tokenA,
+            cuerpo: { rut_estudiante: USUARIO_B.rut }
+        });
+        assert.equal(status, 400);
+        assert.match(datos.error, /estudiantes/);
+    });
+
+    test('asigna la escena a un estudiante, lo lista y evita duplicados', async () => {
+        const asignar = await pedir('POST', `/api/escenas/${escena.id_escena}/asignaciones`, {
+            token: tokenA,
+            cuerpo: { rut_estudiante: CORREO_ESTUDIANTE }
+        });
+        assert.equal(asignar.status, 201);
+
+        const lista = await pedir('GET', `/api/escenas/${escena.id_escena}/asignaciones`, { token: tokenA });
+        assert.ok(lista.datos.resultados.some(a => a.rut_estudiante === CORREO_ESTUDIANTE));
+
+        const repetida = await pedir('POST', `/api/escenas/${escena.id_escena}/asignaciones`, {
+            token: tokenA,
+            cuerpo: { rut_estudiante: CORREO_ESTUDIANTE }
+        });
+        assert.equal(repetida.status, 400);
+    });
+
+    test('el estudiante ve sus escenas asignadas y pueden quitarse', async () => {
+        const tokenC = await login(USUARIO_C);
+        const mias = await pedir('GET', '/api/asignaciones/mias', { token: tokenC });
+        assert.ok(mias.datos.resultados.some(e => e.id_escena === escena.id_escena));
+
+        await pedir('DELETE', `/api/escenas/${escena.id_escena}/asignaciones/${CORREO_ESTUDIANTE}`, { token: tokenA });
+        const despues = await pedir('GET', '/api/asignaciones/mias', { token: tokenC });
+        assert.ok(!despues.datos.resultados.some(e => e.id_escena === escena.id_escena));
     });
 });
 

@@ -81,6 +81,21 @@ async function eventoDelUsuario(id_evento, rut) {
     return resultado.recordset.length > 0;
 }
 
+async function mismaEscena(id_evento_a, id_evento_b) {
+    const conexionPool = await promesaPool;
+    const resultado = await conexionPool.request()
+        .input('a', sql.Int, id_evento_a)
+        .input('b', sql.Int, id_evento_b)
+        .query(`
+            SELECT V.id_evento, L.id_escena
+            FROM Eventos_Historicos V
+            JOIN Lineas_Tiempo L ON V.id_linea = L.id_linea
+            WHERE V.id_evento IN (@a, @b)
+        `);
+    const escenas = new Set(resultado.recordset.map(r => r.id_escena));
+    return resultado.recordset.length === 2 && escenas.size === 1;
+}
+
 const SIN_PERMISO = { error: 'No tienes permiso para esta acción' };
 // Fin autenticacion de la API
 
@@ -253,7 +268,10 @@ app.post('/api/lineas', async (req, res) => {
 // Inicio logica creacion evento
 app.post('/api/eventos', async (req, res) => {
     try {
-        const { id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url } = req.body;
+        const { id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url, precision_fecha, interpretacion } = req.body;
+        if (precision_fecha && !PRECISIONES.includes(precision_fecha)) {
+            return res.status(400).json({ error: 'La precisión de la fecha no es válida' });
+        }
 
         if (!id_linea || !titulo_evento || !anio_inicio) {
             return res.status(400).json({ error: 'id_linea, titulo_evento y anio_inicio son requeridos' });
@@ -270,9 +288,11 @@ app.post('/api/eventos', async (req, res) => {
             .input('anio_fin', sql.Int, anio_fin || null)
             .input('descripcion', sql.Text, descripcion || null)
             .input('imagen_url', sql.VarChar, imagen_url || null)
+            .input('precision_fecha', sql.VarChar, precision_fecha || 'exacta')
+            .input('interpretacion', sql.Text, interpretacion || null)
             .query(`
-                INSERT INTO Eventos_Historicos (id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url)
-                VALUES (@id_linea, @id_categoria, @titulo_evento, @anio_inicio, @anio_fin, @descripcion, @imagen_url)
+                INSERT INTO Eventos_Historicos (id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url, precision_fecha, interpretacion)
+                VALUES (@id_linea, @id_categoria, @titulo_evento, @anio_inicio, @anio_fin, @descripcion, @imagen_url, @precision_fecha, @interpretacion)
             `);
 
         res.status(201).json({ mensaje: 'Evento histórico creado exitosamente' });
@@ -388,6 +408,31 @@ app.get('/api/escenas/:id/detalle', async (req, res) => {
             });
         }
 
+        const idsEventos = escena.lineas.flatMap(l => (l.eventos || []).map(e => e.id_evento));
+        escena.relaciones = [];
+        if (idsEventos.length > 0) {
+            const relacionesRes = await conexionPool.request()
+                .query(`
+                    SELECT id_relacion, id_evento_origen, id_evento_destino, tipo, nota
+                    FROM Relaciones_Eventos
+                    WHERE id_evento_origen IN (${idsEventos.join(',')}) OR id_evento_destino IN (${idsEventos.join(',')})
+                `);
+            escena.relaciones = relacionesRes.recordset;
+
+            const fuentesRes = await conexionPool.request()
+                .query(`SELECT * FROM Fuentes_Evento WHERE id_evento IN (${idsEventos.join(',')})`);
+            escena.lineas.forEach(linea => {
+                (linea.eventos || []).forEach(evento => {
+                    evento.fuentes = fuentesRes.recordset.filter(f => f.id_evento === evento.id_evento);
+                });
+            });
+        }
+
+        const preguntasRes = await conexionPool.request()
+            .input('id_escena', sql.Int, id_escena)
+            .query('SELECT id_pregunta, texto FROM Preguntas_Escena WHERE id_escena = @id_escena');
+        escena.preguntas = preguntasRes.recordset;
+
         res.status(200).json(escena);
     } catch (error) {
         console.error('Error al obtener detalle de escena:', error.message);
@@ -455,7 +500,10 @@ app.put('/api/eventos/:id', async (req, res) => {
     try {
         if (!(await eventoDelUsuario(req.params.id, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
         const id_evento = req.params.id;
-        const { id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url } = req.body;
+        const { id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url, precision_fecha, interpretacion } = req.body;
+        if (precision_fecha && !PRECISIONES.includes(precision_fecha)) {
+            return res.status(400).json({ error: 'La precisión de la fecha no es válida' });
+        }
 
         if (!titulo_evento || !anio_inicio) {
             return res.status(400).json({ error: 'titulo_evento y anio_inicio son requeridos' });
@@ -470,6 +518,8 @@ app.put('/api/eventos/:id', async (req, res) => {
             .input('anio_fin', sql.Int, anio_fin || null)
             .input('descripcion', sql.Text, descripcion || null)
             .input('imagen_url', sql.VarChar, imagen_url || null)
+            .input('precision_fecha', sql.VarChar, precision_fecha || 'exacta')
+            .input('interpretacion', sql.Text, interpretacion || null)
             .query(`
                 UPDATE Eventos_Historicos
                 SET id_categoria = @id_categoria, 
@@ -477,7 +527,9 @@ app.put('/api/eventos/:id', async (req, res) => {
                     anio_inicio = @anio_inicio, 
                     anio_fin = @anio_fin, 
                     descripcion = @descripcion, 
-                    imagen_url = @imagen_url
+                    imagen_url = @imagen_url,
+                    precision_fecha = @precision_fecha,
+                    interpretacion = @interpretacion
                 WHERE id_evento = @id_evento
             `);
 
@@ -563,6 +615,9 @@ const DIR_PLANTILLAS = path.join(__dirname, 'plantillas');
 const MAX_LINEAS = 50;
 const MAX_EVENTOS = 2000;
 const REGEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const PRECISIONES = ['exacta', 'aproximada', 'siglo', 'decada'];
+const TIPOS_RELACION = ['causa', 'consecuencia', 'contemporaneo', 'influencia', 'respuesta'];
+const TIPOS_FUENTE = ['primaria', 'secundaria', 'enciclopedia', 'otra'];
 
 function errorValidacion(mensaje) {
     const error = new Error(mensaje);
@@ -622,6 +677,9 @@ async function validarLineas(conexionPool, lineas) {
                 throw errorValidacion(`${etiquetaEvento}: la fuente debe ser una URL http(s)`);
             }
 
+            const precision_fecha = evento.precision_fecha || 'exacta';
+            if (!PRECISIONES.includes(precision_fecha)) throw errorValidacion(`${etiquetaEvento}: la precisión "${precision_fecha}" no es válida`);
+
             return {
                 titulo_evento: evento.titulo_evento,
                 anio_inicio,
@@ -629,7 +687,9 @@ async function validarLineas(conexionPool, lineas) {
                 id_categoria,
                 descripcion: evento.descripcion || '',
                 imagen_url: evento.imagen_url || null,
-                fuente_url
+                fuente_url,
+                precision_fecha,
+                interpretacion: evento.interpretacion || null
             };
         });
 
@@ -671,9 +731,11 @@ async function insertarLineas(transaccion, id_escena, lineasValidas) {
                 .input('descripcion', sql.Text, evento.descripcion)
                 .input('imagen_url', sql.VarChar, evento.imagen_url)
                 .input('fuente_url', sql.VarChar, evento.fuente_url)
+                .input('precision_fecha', sql.VarChar, evento.precision_fecha)
+                .input('interpretacion', sql.Text, evento.interpretacion)
                 .query(`
-                    INSERT INTO Eventos_Historicos (id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url, fuente_url)
-                    VALUES (@id_linea, @id_categoria, @titulo_evento, @anio_inicio, @anio_fin, @descripcion, @imagen_url, @fuente_url)
+                    INSERT INTO Eventos_Historicos (id_linea, id_categoria, titulo_evento, anio_inicio, anio_fin, descripcion, imagen_url, fuente_url, precision_fecha, interpretacion)
+                    VALUES (@id_linea, @id_categoria, @titulo_evento, @anio_inicio, @anio_fin, @descripcion, @imagen_url, @fuente_url, @precision_fecha, @interpretacion)
                 `);
         }
     }
@@ -976,6 +1038,243 @@ app.post('/api/ia/propuesta', async (req, res) => {
 });
 // Fin configuracion IA
 
+
+// Inicio relaciones entre eventos
+app.post('/api/relaciones', async (req, res) => {
+    try {
+        const { id_evento_origen, id_evento_destino, tipo, nota } = req.body;
+        if (!id_evento_origen || !id_evento_destino || !TIPOS_RELACION.includes(tipo)) {
+            return res.status(400).json({ error: 'Origen, destino y un tipo de relación válido son requeridos' });
+        }
+        if (String(id_evento_origen) === String(id_evento_destino)) {
+            return res.status(400).json({ error: 'Un evento no puede relacionarse consigo mismo' });
+        }
+        if (nota && nota.length > 300) return res.status(400).json({ error: 'La nota no puede superar los 300 caracteres' });
+
+        if (!(await eventoDelUsuario(id_evento_origen, req.usuario.rut)) || !(await eventoDelUsuario(id_evento_destino, req.usuario.rut))) {
+            return res.status(403).json(SIN_PERMISO);
+        }
+        if (!(await mismaEscena(id_evento_origen, id_evento_destino))) {
+            return res.status(400).json({ error: 'Ambos eventos deben pertenecer a la misma escena' });
+        }
+
+        const conexionPool = await promesaPool;
+        const insertRes = await conexionPool.request()
+            .input('origen', sql.Int, id_evento_origen)
+            .input('destino', sql.Int, id_evento_destino)
+            .input('tipo', sql.VarChar, tipo)
+            .input('nota', sql.VarChar, nota || null)
+            .query(`
+                INSERT INTO Relaciones_Eventos (id_evento_origen, id_evento_destino, tipo, nota)
+                OUTPUT INSERTED.id_relacion
+                VALUES (@origen, @destino, @tipo, @nota)
+            `);
+        res.status(201).json({ mensaje: 'Relación creada', id_relacion: insertRes.recordset[0].id_relacion });
+    } catch (error) {
+        console.error('Error al crear relación:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al crear la relación' });
+    }
+});
+
+app.delete('/api/relaciones/:id', async (req, res) => {
+    try {
+        const conexionPool = await promesaPool;
+        const relacion = await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .query('SELECT id_evento_origen FROM Relaciones_Eventos WHERE id_relacion = @id');
+        if (!relacion.recordset[0]) return res.status(404).json({ error: 'Relación no encontrada' });
+        if (!(await eventoDelUsuario(relacion.recordset[0].id_evento_origen, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+
+        await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .query('DELETE FROM Relaciones_Eventos WHERE id_relacion = @id');
+        res.status(200).json({ mensaje: 'Relación eliminada' });
+    } catch (error) {
+        console.error('Error al borrar relación:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al borrar la relación' });
+    }
+});
+// Fin relaciones entre eventos
+
+// Inicio fuentes por evento
+app.post('/api/eventos/:id/fuentes', async (req, res) => {
+    try {
+        const { titulo, autor, anio, url, tipo } = req.body;
+        if (!titulo || titulo.length > 200 || !TIPOS_FUENTE.includes(tipo)) {
+            return res.status(400).json({ error: 'El título y un tipo de fuente válido son requeridos' });
+        }
+        if (url && (url.length > 500 || !/^https?:\/\//i.test(url))) {
+            return res.status(400).json({ error: 'La URL de la fuente debe ser http(s)' });
+        }
+        if (anio && !Number.isInteger(Number(anio))) return res.status(400).json({ error: 'El año de la fuente no es válido' });
+        if (!(await eventoDelUsuario(req.params.id, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+
+        const conexionPool = await promesaPool;
+        const insertRes = await conexionPool.request()
+            .input('id_evento', sql.Int, req.params.id)
+            .input('titulo', sql.VarChar, titulo)
+            .input('autor', sql.VarChar, autor || null)
+            .input('anio', sql.Int, anio ? Number(anio) : null)
+            .input('url', sql.VarChar, url || null)
+            .input('tipo', sql.VarChar, tipo)
+            .query(`
+                INSERT INTO Fuentes_Evento (id_evento, titulo, autor, anio, url, tipo)
+                OUTPUT INSERTED.id_fuente
+                VALUES (@id_evento, @titulo, @autor, @anio, @url, @tipo)
+            `);
+        res.status(201).json({ mensaje: 'Fuente añadida', id_fuente: insertRes.recordset[0].id_fuente });
+    } catch (error) {
+        console.error('Error al añadir fuente:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al añadir la fuente' });
+    }
+});
+
+app.delete('/api/fuentes/:id', async (req, res) => {
+    try {
+        const conexionPool = await promesaPool;
+        const fuente = await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .query('SELECT id_evento FROM Fuentes_Evento WHERE id_fuente = @id');
+        if (!fuente.recordset[0]) return res.status(404).json({ error: 'Fuente no encontrada' });
+        if (!(await eventoDelUsuario(fuente.recordset[0].id_evento, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+
+        await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .query('DELETE FROM Fuentes_Evento WHERE id_fuente = @id');
+        res.status(200).json({ mensaje: 'Fuente eliminada' });
+    } catch (error) {
+        console.error('Error al borrar fuente:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al borrar la fuente' });
+    }
+});
+// Fin fuentes por evento
+
+// Inicio preguntas guiadas
+app.post('/api/escenas/:id/preguntas', async (req, res) => {
+    try {
+        const { texto } = req.body;
+        if (!texto || texto.length > 400) return res.status(400).json({ error: 'La pregunta es requerida (máx. 400 caracteres)' });
+        if (!(await escenaDelUsuario(req.params.id, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+
+        const conexionPool = await promesaPool;
+        const insertRes = await conexionPool.request()
+            .input('id_escena', sql.Int, req.params.id)
+            .input('texto', sql.VarChar, texto)
+            .query(`
+                INSERT INTO Preguntas_Escena (id_escena, texto)
+                OUTPUT INSERTED.id_pregunta
+                VALUES (@id_escena, @texto)
+            `);
+        res.status(201).json({ mensaje: 'Pregunta añadida', id_pregunta: insertRes.recordset[0].id_pregunta });
+    } catch (error) {
+        console.error('Error al añadir pregunta:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al añadir la pregunta' });
+    }
+});
+
+app.delete('/api/preguntas/:id', async (req, res) => {
+    try {
+        const conexionPool = await promesaPool;
+        const pregunta = await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .query('SELECT id_escena FROM Preguntas_Escena WHERE id_pregunta = @id');
+        if (!pregunta.recordset[0]) return res.status(404).json({ error: 'Pregunta no encontrada' });
+        if (!(await escenaDelUsuario(pregunta.recordset[0].id_escena, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+
+        await conexionPool.request()
+            .input('id', sql.Int, req.params.id)
+            .query('DELETE FROM Preguntas_Escena WHERE id_pregunta = @id');
+        res.status(200).json({ mensaje: 'Pregunta eliminada' });
+    } catch (error) {
+        console.error('Error al borrar pregunta:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al borrar la pregunta' });
+    }
+});
+// Fin preguntas guiadas
+
+// Inicio asignacion de escenas a estudiantes
+app.get('/api/escenas/:id/asignaciones', async (req, res) => {
+    try {
+        if (!(await escenaDelUsuario(req.params.id, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request()
+            .input('id_escena', sql.Int, req.params.id)
+            .query(`
+                SELECT A.rut_estudiante, U.nombre_completo
+                FROM Asignaciones_Escena A
+                JOIN Usuarios U ON A.rut_estudiante = U.rut_usuario
+                WHERE A.id_escena = @id_escena
+            `);
+        res.status(200).json({ resultados: resultado.recordset });
+    } catch (error) {
+        console.error('Error al listar asignaciones:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al listar asignaciones' });
+    }
+});
+
+app.post('/api/escenas/:id/asignaciones', async (req, res) => {
+    try {
+        const { rut_estudiante } = req.body;
+        if (!rut_estudiante) return res.status(400).json({ error: 'El RUT del estudiante es requerido' });
+        if (!(await escenaDelUsuario(req.params.id, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+
+        const conexionPool = await promesaPool;
+        const usuario = await conexionPool.request()
+            .input('rut', sql.VarChar, rut_estudiante)
+            .query('SELECT id_perfil FROM Usuarios WHERE rut_usuario = @rut');
+        if (!usuario.recordset[0]) return res.status(404).json({ error: 'El estudiante no existe' });
+        if (usuario.recordset[0].id_perfil !== 2) return res.status(400).json({ error: 'Solo se pueden asignar escenas a estudiantes' });
+
+        const existe = await conexionPool.request()
+            .input('id_escena', sql.Int, req.params.id)
+            .input('rut', sql.VarChar, rut_estudiante)
+            .query('SELECT 1 AS ok FROM Asignaciones_Escena WHERE id_escena = @id_escena AND rut_estudiante = @rut');
+        if (existe.recordset.length > 0) return res.status(400).json({ error: 'La escena ya está asignada a este estudiante' });
+
+        await conexionPool.request()
+            .input('id_escena', sql.Int, req.params.id)
+            .input('rut', sql.VarChar, rut_estudiante)
+            .query('INSERT INTO Asignaciones_Escena (id_escena, rut_estudiante) VALUES (@id_escena, @rut)');
+        res.status(201).json({ mensaje: 'Escena asignada al estudiante' });
+    } catch (error) {
+        console.error('Error al asignar escena:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al asignar la escena' });
+    }
+});
+
+app.delete('/api/escenas/:id/asignaciones/:rut', async (req, res) => {
+    try {
+        if (!(await escenaDelUsuario(req.params.id, req.usuario.rut))) return res.status(403).json(SIN_PERMISO);
+        const conexionPool = await promesaPool;
+        await conexionPool.request()
+            .input('id_escena', sql.Int, req.params.id)
+            .input('rut', sql.VarChar, req.params.rut)
+            .query('DELETE FROM Asignaciones_Escena WHERE id_escena = @id_escena AND rut_estudiante = @rut');
+        res.status(200).json({ mensaje: 'Asignación eliminada' });
+    } catch (error) {
+        console.error('Error al quitar asignación:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al quitar la asignación' });
+    }
+});
+
+app.get('/api/asignaciones/mias', async (req, res) => {
+    try {
+        const conexionPool = await promesaPool;
+        const resultado = await conexionPool.request()
+            .input('rut', sql.VarChar, req.usuario.rut)
+            .query(`
+                SELECT E.id_escena, E.nombre_escena
+                FROM Asignaciones_Escena A
+                JOIN Escenas_Crono E ON A.id_escena = E.id_escena
+                WHERE A.rut_estudiante = @rut
+            `);
+        res.status(200).json({ resultados: resultado.recordset });
+    } catch (error) {
+        console.error('Error al listar asignaciones propias:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al listar tus escenas asignadas' });
+    }
+});
+// Fin asignacion de escenas a estudiantes
 
 // Inicio servidor
 app.listen(PORT, () => {
