@@ -1,6 +1,9 @@
 // Inicio URLs
 const API_URL = '/api';
 
+// Inicio escape HTML para datos de usuario y de la base de datos
+const escaparHTML = (texto) => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 // Inicio token de sesion en peticiones a la API
 const fetchSinToken = window.fetch.bind(window);
 window.fetch = (url, opciones = {}) => {
@@ -199,6 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     let idEscenaActual = null;
     let idLineaActual = null;
+    let eventosCargados = new Map();
 
     // Elementos acordeon
     const accHeaderEscena = document.getElementById('acc-header-escena');
@@ -237,7 +241,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const selectorEscena = document.getElementById('escenaGlobal');
             selectorEscena.innerHTML = '<option value="">-- Seleccionar Escena Existente --</option>';
             datosEscenas.resultados.forEach(e => {
-                selectorEscena.innerHTML += `<option value="${e.id_escena}">${e.nombre_escena}</option>`;
+                selectorEscena.innerHTML += `<option value="${e.id_escena}">${escaparHTML(e.nombre_escena)}</option>`;
             });
 
             // Carga zonas
@@ -246,7 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const selectorZona = document.getElementById('zonaSeleccionada');
             selectorZona.innerHTML = '<option value="">-- Seleccionar Continente --</option>';
             datosZonas.resultados.forEach(z => {
-                selectorZona.innerHTML += `<option value="${z.id_zona}">${z.nombre_zona}</option>`;
+                selectorZona.innerHTML += `<option value="${z.id_zona}">${escaparHTML(z.nombre_zona)}</option>`;
             });
 
             // Carga categorias
@@ -255,7 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const selectorCat = document.getElementById('categoriaEvento');
             selectorCat.innerHTML = '<option value="">-- Seleccionar Categoría --</option>';
             datosCat.resultados.forEach(c => {
-                selectorCat.innerHTML += `<option value="${c.id_categoria}">${c.nombre_categoria}</option>`;
+                selectorCat.innerHTML += `<option value="${c.id_categoria}">${escaparHTML(c.nombre_categoria)}</option>`;
             });
 
         } catch (error) {
@@ -315,7 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const datos = await manejarRespuesta(respuesta);
             selectorLinea.innerHTML = '<option value="">-- Seleccionar Línea Existente --</option>';
             datos.resultados.forEach(l => {
-                selectorLinea.innerHTML += `<option value="${l.id_linea}">${l.nombre_linea}</option>`;
+                selectorLinea.innerHTML += `<option value="${l.id_linea}">${escaparHTML(l.nombre_linea)}</option>`;
             });
         } catch(error) {
             selectorLinea.innerHTML = '<option value="">-- Error --</option>';
@@ -440,33 +444,36 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
+            eventosCargados = new Map(datos.resultados.map(ev => [String(ev.id_evento), ev]));
             datos.resultados.forEach(ev => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${ev.titulo_evento}</td>
-                    <td>${ev.anio_inicio}</td>
-                    <td>${ev.anio_fin || '-'}</td>
-                    <td>${ev.nombre_categoria || 'General'}</td>
+                    <td>${escaparHTML(ev.titulo_evento)}</td>
+                    <td>${Number(ev.anio_inicio)}</td>
+                    <td>${ev.anio_fin ? Number(ev.anio_fin) : '-'}</td>
+                    <td>${escaparHTML(ev.nombre_categoria || 'General')}</td>
                     <td>
-                        <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; background-color: #f39c12; margin-right: 5px;" onclick="window.editarEventoC(${ev.id_evento}, '${ev.titulo_evento.replace(/'/g, "\\'")}', ${ev.anio_inicio}, ${ev.anio_fin || null}, ${ev.id_categoria || null}, '${(ev.descripcion || '').replace(/\n/g, "\\n").replace(/'/g, "\\'")}', '${(ev.imagen_url || '').replace(/'/g, "\\'")}')">Editar</button>
-                        <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; background-color: #e74c3c;" onclick="window.borrarEventoC(${ev.id_evento})">Borrar</button>
+                        <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; background-color: #f39c12; margin-right: 5px;" onclick="window.editarEventoC(${Number(ev.id_evento)})">Editar</button>
+                        <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; background-color: #e74c3c;" onclick="window.borrarEventoC(${Number(ev.id_evento)})">Borrar</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         } catch(error) {
-            tbody.innerHTML = `<tr><td colspan="5" style="color: #ff6b6b; text-align:center;">Error: ${error.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="color: #ff6b6b; text-align:center;">Error: ${escaparHTML(error.message)}</td></tr>`;
         }
     }
 
-    window.editarEventoC = function(id, titulo, anio_inicio, anio_fin, id_categoria, descripcion, imagen_url) {
-        document.getElementById('idEventoModificar').value = id;
-        document.getElementById('tituloEvento').value = titulo;
-        document.getElementById('anioInicio').value = anio_inicio;
-        document.getElementById('anioFin').value = anio_fin || '';
-        document.getElementById('categoriaEvento').value = id_categoria || '';
-        document.getElementById('descEvento').value = descripcion || '';
-        document.getElementById('imagenUrl').value = imagen_url || '';
+    window.editarEventoC = function(id) {
+        const evento = eventosCargados.get(String(id));
+        if (!evento) return;
+        document.getElementById('idEventoModificar').value = evento.id_evento;
+        document.getElementById('tituloEvento').value = evento.titulo_evento;
+        document.getElementById('anioInicio').value = evento.anio_inicio;
+        document.getElementById('anioFin').value = evento.anio_fin || '';
+        document.getElementById('categoriaEvento').value = evento.id_categoria || '';
+        document.getElementById('descEvento').value = evento.descripcion || '';
+        document.getElementById('imagenUrl').value = evento.imagen_url || '';
         
         document.getElementById('btnGuardarEvento').textContent = 'Actualizar Evento';
         document.getElementById('btnCancelarEdicion').classList.remove('hidden');
@@ -605,9 +612,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tarjeta.onclick = () => window.location.href = `lienzo.html?id=${escena.id_escena}`;
                 tarjeta.innerHTML = `
                     <div class="scene-card-content">
-                        <h3>${escena.nombre_escena}</h3>
+                        <h3>${escaparHTML(escena.nombre_escena)}</h3>
                         <p style="color: #ccc; font-size: 0.9rem;">Escena Crono-Espacial</p>
-                        <button class="btn" onclick="event.stopPropagation(); window.abrirEdicionProfunda(${escena.id_escena}, '${escena.nombre_escena.replace(/'/g, "\\'")}')">Editar Escena</button>
+                        <button class="btn" onclick="event.stopPropagation(); window.abrirEdicionProfunda(${Number(escena.id_escena)}, this.dataset.nombre)" data-nombre="${escaparHTML(escena.nombre_escena)}">Editar Escena</button>
                     </div>
                 `;
                 grilla.appendChild(tarjeta);
@@ -665,10 +672,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ========================================================
     let propuestaIA = null;
 
-    function escaparHTML(texto) {
-        return String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
     async function cargarConfigIA() {
         const selectorProveedor = document.getElementById('iaProveedor');
         const estado = document.getElementById('iaEstado');
@@ -679,7 +682,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const respProv = await fetch(`${API_URL}/ia/proveedores`);
                 const datosProv = await manejarRespuesta(respProv);
                 datosProv.resultados.forEach(p => {
-                    selectorProveedor.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+                    selectorProveedor.innerHTML += `<option value="${p.id}">${escaparHTML(p.nombre)}</option>`;
                 });
             }
 
@@ -707,7 +710,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const valorActual = selector.value;
             selector.innerHTML = '<option value="">-- Seleccionar Escena --</option>';
             datos.resultados.forEach(e => {
-                selector.innerHTML += `<option value="${e.id_escena}">${e.nombre_escena}</option>`;
+                selector.innerHTML += `<option value="${e.id_escena}">${escaparHTML(e.nombre_escena)}</option>`;
             });
             selector.value = valorActual;
         } catch (error) {
@@ -840,7 +843,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const datos = await manejarRespuesta(respuesta);
             selector.innerHTML = '<option value="">-- Seleccionar Plantilla --</option>';
             datos.resultados.forEach(p => {
-                selector.innerHTML += `<option value="${p.id}">${p.nombre} (${p.total_lineas} líneas)</option>`;
+                selector.innerHTML += `<option value="${escaparHTML(p.id)}">${escaparHTML(p.nombre)} (${Number(p.total_lineas)} líneas)</option>`;
             });
         } catch (error) {
             selector.innerHTML = '<option value="">-- Error al cargar plantillas --</option>';
@@ -1160,7 +1163,7 @@ function renderizarEscenas(escenas) {
         tarjeta.onclick = () => window.location.href = `lienzo.html?id=${escena.id_escena}`;
         
         tarjeta.innerHTML = `
-            <h3>${escena.nombre_escena}</h3>
+            <h3>${escaparHTML(escena.nombre_escena)}</h3>
             <p style="margin-top: 15px; font-weight: 600; color: #4a90e2; font-size: 0.95rem;">Explorar Escena ➔</p>
         `;
         grilla.appendChild(tarjeta);
@@ -1281,9 +1284,9 @@ function _renderizarLineasDeTiempo() {
         const cabecera = document.createElement('div');
         cabecera.className = 'lane-header';
         cabecera.innerHTML = `
-            <h3 class="lane-title" style="border-left-color: ${linea.color_personalizado}; color: white;">
-                ${linea.nombre_linea}
-                <span style="font-size:0.75rem; font-weight:400; opacity:0.6;">(${linea.nombre_zona})</span>
+            <h3 class="lane-title" style="border-left-color: ${escaparHTML(linea.color_personalizado)}; color: white;">
+                ${escaparHTML(linea.nombre_linea)}
+                <span style="font-size:0.75rem; font-weight:400; opacity:0.6;">(${escaparHTML(linea.nombre_zona)})</span>
             </h3>
         `;
         carril.appendChild(cabecera);
@@ -1416,7 +1419,7 @@ function _abrirModal(evento, colorLinea) {
 
     // Inicio renderizado de imagen modal
     if (evento.imagen_url && evento.imagen_url.trim() !== '') {
-        contenedorImg.innerHTML = `<img src="${evento.imagen_url.trim()}" alt="${evento.titulo_evento}" style="width: 100%; height: 220px; object-fit: cover; border-radius: 20px 20px 0 0; display: block;">`;
+        contenedorImg.innerHTML = `<img src="${escaparHTML(evento.imagen_url.trim())}" alt="${escaparHTML(evento.titulo_evento)}" style="width: 100%; height: 220px; object-fit: cover; border-radius: 20px 20px 0 0; display: block;">`;
         contenedorImg.style.display = 'block';
     } else {
         contenedorImg.innerHTML = '';
@@ -1436,7 +1439,7 @@ function _abrirModal(evento, colorLinea) {
     const fuenteModal = document.getElementById('modalFuente');
     if (fuenteModal) {
         fuenteModal.innerHTML = evento.fuente_url
-            ? `<a href="${evento.fuente_url.replace(/"/g, '&quot;')}" target="_blank" rel="noopener" style="color: #4a90e2;">Ver fuente</a>`
+            ? `<a href="${escaparHTML(evento.fuente_url)}" target="_blank" rel="noopener" style="color: #4a90e2;">Ver fuente</a>`
             : '';
     }
 
